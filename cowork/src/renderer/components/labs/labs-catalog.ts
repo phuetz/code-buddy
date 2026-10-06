@@ -6,7 +6,7 @@
  * from the single source of truth in `genspark-slices.ts`) with:
  *   - a lazy `load()` (a STATIC `import()` so Vite can code-split each component out of the
  *     main bundle — the gallery itself stays light), and
- *   - a minimal, HONEST empty-state `props` object (empty arrays, zeroed summaries, no-op
+ *   - a minimal, HONEST empty-state `props` object (empty arrays, zeroed summaries, no placeholder
  *     callbacks). Every component renders a clean empty state from these.
  *
  * Only `panel`- and `labs`-mount slices belong here. `composer` / `chat-inline` / `settings`
@@ -15,7 +15,7 @@
  * Components are typed loosely as `LabsComponent` on purpose: the gallery passes a plain
  * `Record<string, unknown>` of empty defaults and never constructs the components' real prop
  * types, so union-literal fields (`mode: 'plan'`, `kind: 'doc'`, …) need no `as const` dance.
- * A render throw is caught by the gallery's per-card error boundary (`fallback={null}`), so an
+ * Entries requiring unwired callbacks are omitted. A render throw is caught by the gallery's per-card error boundary (`fallback={null}`), so an
  * imperfect default can never crash the shelf.
  *
  * @module renderer/components/labs/labs-catalog
@@ -75,66 +75,13 @@ const WIRING: Record<string, LabsWiring> = {
     load: () => import('../deliverables/VideoStudioPanel').then((m) => named(m, 'VideoStudioPanel')),
     props: {},
   },
-  A2: {
-    load: () => import('../MissionBoard').then((m) => named(m, 'MissionBoard')),
-    props: { missions: [], onOpen: () => {}, onPause: () => {}, onResume: () => {} },
-  },
-  A3: {
-    load: () => import('../MissionResumeMenu').then((m) => named(m, 'MissionResumeMenu')),
-    props: { checkpoints: [], onResume: () => {}, onBranch: () => {} },
-  },
   A5: {
     load: () => import('../GuardrailsBadge').then((m) => named(m, 'GuardrailsBadge')),
     props: { mode: 'plan', guardrails: [] },
   },
-  B1: {
-    load: () => import('../SlideDeckBuilder').then((m) => named(m, 'SlideDeckBuilder')),
-    props: { outline: [], onGenerate: () => {}, onEditOutline: () => {} },
-  },
-  B2: {
-    load: () => import('../SheetAnalystView').then((m) => named(m, 'SheetAnalystView')),
-    props: { schema: { title: '', source: '', columns: [] }, rows: [], onRun: () => {} },
-  },
-  B3: {
-    load: () => import('../DocComposer').then((m) => named(m, 'DocComposer')),
-    props: { sections: [], onGenerate: () => {} },
-  },
-  B4: {
-    load: () => import('../ImagePromptStudio').then((m) => named(m, 'ImagePromptStudio')),
-    props: { presets: [], results: [], onGenerate: () => {} },
-  },
-  B5: {
-    load: () => import('../ShortVideoStoryboard').then((m) => named(m, 'ShortVideoStoryboard')),
-    props: { scenes: [], onRender: () => {} },
-  },
-  B6: {
-    load: () => import('../PodcastComposer').then((m) => named(m, 'PodcastComposer')),
-    props: { segments: [], onSynthesize: () => {} },
-  },
-  B7: {
-    load: () => import('../ExportShareSheet').then((m) => named(m, 'ExportShareSheet')),
-    props: {
-      deliverable: { id: '', title: '', kind: 'doc' },
-      formats: [],
-      onExport: () => {},
-      onShare: () => {},
-    },
-  },
-  C1: {
-    load: () => import('../BrowserAutopilotPanel').then((m) => named(m, 'BrowserAutopilotPanel')),
-    props: { steps: [], onStart: () => {}, onStop: () => {} },
-  },
-  C2: {
-    load: () => import('../ComputerUseViewer').then((m) => named(m, 'ComputerUseViewer')),
-    props: { files: [], onPick: () => {} },
-  },
   C3: {
     load: () => import('../CallLogView').then((m) => named(m, 'CallLogView')),
     props: { transcript: [], summary: '' },
-  },
-  D1: {
-    load: () => import('../ChannelMissionAssign').then((m) => named(m, 'ChannelMissionAssign')),
-    props: { channels: [], onAssign: () => {} },
   },
   D2: {
     load: () => import('../WorkerDashboard').then((m) => named(m, 'WorkerDashboard')),
@@ -149,49 +96,9 @@ const WIRING: Record<string, LabsWiring> = {
       },
     },
   },
-  D4: {
-    load: () => import('../MobileSupervisionView').then((m) => named(m, 'MobileSupervisionView')),
-    props: { missions: [], onAct: () => {} },
-  },
-  E4: {
-    load: () => import('../deliverables/DrivePanel').then((m) => named(m, 'DrivePanel')),
-    props: {},
-  },
-  E1: {
-    load: () => import('../DriveGrid').then((m) => named(m, 'DriveGrid')),
-    props: { items: [], onOpen: () => {}, onTag: () => {} },
-  },
-  E2: {
-    load: () =>
-      import('../DeliverableVersionTimeline').then((m) => named(m, 'DeliverableVersionTimeline')),
-    props: { versions: [], onRestore: () => {}, onDiff: () => {} },
-  },
-  E3: {
-    load: () => import('../ShareLinkDialog').then((m) => named(m, 'ShareLinkDialog')),
-    props: {
-      item: { id: '', title: '', type: 'doc', tags: [], updatedAt: 0 },
-      onCreateLink: () => {},
-    },
-  },
-  F1: {
-    load: () => import('../ModelComparatorView').then((m) => named(m, 'ModelComparatorView')),
-    props: { answers: [], onPick: () => {} },
-  },
   F2: {
     load: () => import('../DeliberationPanel').then((m) => named(m, 'DeliberationPanel')),
     props: { verdicts: [], dhi: 0 },
-  },
-  G4: {
-    load: () => import('../MissionReplayView').then((m) => named(m, 'MissionReplayView')),
-    props: { events: [], onSeek: () => {} },
-  },
-  G6: {
-    load: () => import('../FocusRunnerView').then((m) => named(m, 'FocusRunnerView')),
-    props: {
-      mission: { id: '', title: '', status: 'queued', progress: 0, model: '', durationMs: 0 },
-      log: [],
-      onExit: () => {},
-    },
   },
   NV1: {
     load: () => import('../viz/Sparkline').then((m) => named(m, 'Sparkline')),
@@ -293,14 +200,6 @@ const WIRING: Record<string, LabsWiring> = {
       ],
     },
   },
-  NA3: {
-    load: () => import('../media-gen/MediaGenComposer').then((m) => named(m, 'MediaGenComposer')),
-    props: { mode: 'image', prompt: 'Un copilote terminal lumineux qui orchestre une flotte IA', onPromptChange: () => {}, onSubmit: () => {} },
-  },
-  NA4: {
-    load: () => import('../template-gallery/TemplateGallery').then((m) => named(m, 'TemplateGallery')),
-    props: {},
-  },
   NA5: {
     load: () => import('../media-gen/MediaGenPanel').then((m) => named(m, 'MediaGenPanel')),
     props: {},
@@ -347,88 +246,7 @@ const WIRING: Record<string, LabsWiring> = {
       right: 'Gate: typecheck + vite build.',
     },
   },
-  NA1: {
-    load: () => import('../drive/AiDrive').then((m) => named(m, 'AiDrive')),
-    props: {
-      items: [
-        { id: 'd1', name: 'Analyse marché Q3.xlsx', kind: 'sheet', createdAt: Date.now() - 1_200_000, sizeBytes: 48_213 },
-        { id: 'd2', name: 'Pitch investisseurs.pptx', kind: 'slide', createdAt: Date.now() - 5_400_000, sizeBytes: 1_843_200 },
-        { id: 'd3', name: 'Rapport concurrence.md', kind: 'doc', createdAt: Date.now() - 86_400_000, sizeBytes: 12_400 },
-        { id: 'd4', name: 'hero-banner.png', kind: 'image', createdAt: Date.now() - 3_600_000, sizeBytes: 542_000 },
-        { id: 'd5', name: 'demo-produit.mp4', kind: 'video', createdAt: Date.now() - 172_800_000, sizeBytes: 8_400_000 },
-        { id: 'd6', name: 'todo-app', kind: 'app', createdAt: Date.now() - 600_000 },
-      ],
-      onOpen: () => {},
-      onDelete: () => {},
-    },
-  },
-  NA2: {
-    load: () => import('../media-gen/MediaGallery').then((m) => named(m, 'MediaGallery')),
-    props: {
-      items: [
-        {
-          id: 'm1',
-          type: 'image',
-          status: 'done',
-          url: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Crect width=%22120%22 height=%22120%22 fill=%22%236366f1%22/%3E%3C/svg%3E',
-          prompt: 'Un renard roux dans une forêt brumeuse, aquarelle',
-          model: 'flux',
-          aspect: '1:1',
-          createdAt: Date.now() - 300_000,
-        },
-        { id: 'm2', type: 'image', status: 'generating', prompt: 'Skyline néon cyberpunk de nuit', aspect: '16:9', createdAt: Date.now() - 60_000 },
-        {
-          id: 'm3',
-          type: 'video',
-          status: 'done',
-          url: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22160%22 height=%2290%22%3E%3Crect width=%22160%22 height=%2290%22 fill=%22%2310a37f%22/%3E%3C/svg%3E',
-          prompt: 'Vagues au coucher du soleil',
-          aspect: '16:9',
-          createdAt: Date.now() - 900_000,
-        },
-        { id: 'm4', type: 'image', status: 'queued', prompt: 'Logo minimaliste marque de café', aspect: '1:1', createdAt: Date.now() - 30_000 },
-        { id: 'm5', type: 'image', status: 'error', prompt: 'Portrait photoréaliste', aspect: '9:16', createdAt: Date.now() - 1_200_000 },
-      ],
-      onSelect: () => {},
-      onRetry: () => {},
-    },
-  },
-  NI1: {
-    load: () => import('../studio-iterate/StudioChatPanel').then((m) => named(m, 'StudioChatPanel')),
-    props: {
-      messages: [
-        { id: '1', role: 'user', text: 'Rends le bouton principal bleu et arrondi.' },
-        { id: '2', role: 'assistant', text: 'Fait — j’ai mis à jour la couleur et le rayon du bouton dans src/App.css, et la preview s’est rechargée.' },
-        { id: '3', role: 'user', text: 'Ajoute un mode sombre.' },
-      ],
-      suggestions: ['Change le thème', 'Ajoute des tests', 'Rends-le responsive'],
-      onSend: () => {},
-      onStop: () => {},
-    },
-  },
-  NI2: {
-    load: () => import('../studio-iterate/ChangedFilesStrip').then((m) => named(m, 'ChangedFilesStrip')),
-    props: {
-      changes: [
-        { path: 'src/App.tsx', kind: 'modified' },
-        { path: 'src/theme.css', kind: 'added' },
-        { path: 'src/legacy.css', kind: 'deleted' },
-      ],
-      onOpen: () => {},
-    },
-  },
-  NI3: {
-    load: () => import('../studio-iterate/PreviewToolbar').then((m) => named(m, 'PreviewToolbar')),
-    props: {
-      url: 'http://127.0.0.1:5173/',
-      status: 'running',
-      device: 'desktop',
-      onReload: () => {},
-      onDevice: () => {},
-      onOpenExternal: () => {},
-      onToggle: () => {},
-    },
-  },
+
 };
 
 /**

@@ -9,7 +9,7 @@
  * broken component can never crash the shelf.
  *
  * This is a discoverability surface, not a workflow: the components render with no live data and
- * no-op callbacks. Wiring real data/callbacks per component belongs to its eventual mount point.
+ * read-only sample props or self-contained tools. Unwired actions are omitted from the catalog.
  *
  * @module renderer/components/labs/LabsGallery
  */
@@ -80,7 +80,7 @@ function PreviewDrawer({ entry, onClose }: { entry: LabsEntry; onClose: () => vo
         <div className="min-w-0">
           <div className="font-semibold truncate">{entry.slice.title}</div>
           <div className="text-[11px] text-muted-foreground">
-            {entry.slice.id} · état vide (aperçu sans données)
+            {entry.slice.id} · aperçu : outil connecté ou exemple en lecture seule
           </div>
         </div>
         <button
@@ -92,7 +92,7 @@ function PreviewDrawer({ entry, onClose }: { entry: LabsEntry; onClose: () => vo
           ✕
         </button>
       </header>
-      <div className="flex-1 min-h-0 overflow-auto p-3">
+      <div className="flex-1 min-h-0 overflow-auto p-3" data-testid="labs-preview-content">
         {/* Error boundary OUTSIDE Suspense: catches both a chunk-load failure and a render throw. */}
         <PanelErrorBoundary name={`Labs:${entry.slice.id}`} resetKey={entry.slice.id} fallback={null}>
           <Suspense
@@ -122,9 +122,9 @@ export function LabsGallery() {
             Labs <span className="text-xs font-normal text-muted-foreground">· composants</span>
           </h2>
           <p className="text-sm text-muted-foreground">
-            {LABS_ENTRIES.length} composants inspirés de Genspark, construits mais dormants. Clique
-            une carte pour l’ouvrir en aperçu (état vide, sans données). Le câblage aux vraies
-            données arrive à leur point de montage.
+            {LABS_ENTRIES.length} composants : outils connectés et exemples en lecture seule. Clique une carte pour
+            l’ouvrir. Les exemples utilisent des données de démonstration ; les actions non
+            câblées ne sont pas proposées.
           </p>
         </header>
 

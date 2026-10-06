@@ -91,7 +91,6 @@ export function HomeView() {
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const setPrimaryView = useAppStore((s) => s.setPrimaryView);
   const setShowLiveLauncher = useAppStore((s) => s.setShowLiveLauncher);
-  const setShowSkillsManager = useAppStore((s) => s.setShowSkillsManager);
   const workingDir = useAppStore((s) => s.workingDir);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const { startSession } = useIPC();
@@ -157,12 +156,6 @@ export function HomeView() {
 
   const quick: QuickAction[] = [
     {
-      id: 'code',
-      label: t('homeView.quick.code.label', 'Code / fix'),
-      hint: t('homeView.quick.code.hint', 'Describe the bug or the feature'),
-      run: () => prefill(''),
-    },
-    {
       id: 'search',
       label: t('homeView.quick.search.label', 'Search'),
       hint: t('homeView.quick.search.hint', 'Wide research + planning flow'),
@@ -172,7 +165,7 @@ export function HomeView() {
       id: 'document',
       label: t('homeView.quick.document.label', 'Create a document'),
       hint: t('homeView.quick.document.hint', 'Excel, Word, PDF, charts'),
-      run: () => setShowSkillsManager(true),
+      run: () => STUDIO_TILES.find((tile) => tile.id === 'document')!.run(useAppStore.getState(), prompt.trim() || null),
     },
   ];
 

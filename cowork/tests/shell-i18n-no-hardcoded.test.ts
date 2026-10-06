@@ -212,7 +212,7 @@ describe('E2 — une seule langue par écran', () => {
 
       const fr = readLocale('fr') as { shell: { rail: Record<string, { label: string }> } };
       expect(screen.getByTestId('rail-os').textContent?.endsWith(fr.shell.rail.os!.label)).toBe(true);
-      expect(screen.getByTestId('rail-workspace').textContent?.endsWith(fr.shell.rail.workspace!.label)).toBe(true);
+      expect(screen.getByTestId('rail-activity').textContent?.endsWith(fr.shell.rail.activity!.label)).toBe(true);
       expect(screen.getByTestId('rail-history').textContent).toContain('Historique');
     });
 

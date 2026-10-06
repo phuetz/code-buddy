@@ -86,7 +86,7 @@ describe('HomeView', () => {
     expect(useAppStore.getState().primaryView).toBe('chat');
   });
 
-  it('quick chips route via store actions (research → live launcher, doc → skills)', () => {
+  it('quick chips route via store actions (research → live launcher, doc → document studio)', () => {
     render();
     const quick = container.querySelector('[data-testid="home-quick"]')!;
     const buttons = [...quick.querySelectorAll('button')];
@@ -97,7 +97,9 @@ describe('HomeView', () => {
 
     const doc = buttons.find((b) => b.textContent?.includes('document'))!;
     act(() => doc.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(useAppStore.getState().showSkillsManager).toBe(true);
+    expect(useAppStore.getState().showSkillsManager).toBe(false);
+    expect(useAppStore.getState().primaryView).toBe('creations');
+    expect(useAppStore.getState().creationsTab).toBe('doc');
   });
 
   it('renders no recents block when there are no sessions', () => {
