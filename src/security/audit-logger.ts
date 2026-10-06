@@ -9,7 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
-import { scrubSecrets, scrubValue } from './secret-scrubber.js';
+import { scrubValue, stringifyScrubbed } from './secret-scrubber.js';
 
 export type AuditAction =
   | 'code_validation'
@@ -116,10 +116,10 @@ class AuditLoggerImpl {
       this.entries = this.entries.slice(-Math.floor(this.maxEntries * 0.8));
     }
 
-    // Re-scrub the rendered line as a final guard before persistence.
+    // Every string is scrubbed again at serialization (any depth) — never scrub the finished JSON line.
     if (this.logFile) {
       try {
-        fs.appendFileSync(this.logFile, scrubSecrets(JSON.stringify(scrubbed)) + '\n');
+        fs.appendFileSync(this.logFile, stringifyScrubbed(scrubbed) + '\n');
       } catch {
         // Silently fail file writes — don't block operations
       }

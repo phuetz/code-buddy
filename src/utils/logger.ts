@@ -209,6 +209,8 @@ export class Logger {
   private safeStringify(obj: unknown): string {
     const seen = new WeakSet();
     return JSON.stringify(obj, (_key, value) => {
+      // Scrub each string value BEFORE serialization (valid JSON by construction).
+      if (typeof value === 'string') return scrubSecrets(value);
       if (value instanceof Error) {
         return { name: value.name, message: value.message, stack: value.stack };
       }
@@ -289,10 +291,9 @@ export class Logger {
 
     // Output to console
     if (!this.options.silent) {
-      // Re-scrub the fully rendered line as a final guard: safeStringify may
-      // surface Error message/stack (non-enumerable, so invisible to
-      // scrubValue) that could still carry a token. Idempotent + fast-path.
-      const formatted = scrubSecrets(this.formatEntry(entry));
+      // No re-scrub of the rendered line: safeStringify scrubs every string value (Error
+      // message/stack included) BEFORE serialization, and scrubbing finished JSON corrupts it.
+      const formatted = this.formatEntry(entry);
       // Route all log levels to stderr to avoid polluting stdout
       // (important for headless --output json mode)
       console.error(formatted);
@@ -300,13 +301,13 @@ export class Logger {
 
     // Output to file (always JSON for easy parsing)
     if (this.fileStream) {
-      const jsonEntry = scrubSecrets(this.safeStringify({
+      const jsonEntry = this.safeStringify({
         timestamp: entry.timestamp,
         level: entry.level,
         source: entry.source,
         message: entry.message,
         ...entry.context,
-      }));
+      });
       this.fileStream.write(jsonEntry + '\n');
 
       // Check log rotation every ROTATION_CHECK_INTERVAL writes

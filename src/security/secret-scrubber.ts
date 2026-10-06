@@ -170,11 +170,12 @@ const ADDED: ScrubPattern[] = [
   },
   // Password inside a URL: scheme://user:password@host (postgres, https, redis, amqp, ...).
   {
-    // Classes exclude quotes, backslash and JSON/markup punctuation so the mask stays INSIDE one
-    // serialized JSON string (a JSONL line must still parse) and never crosses a token end;
-    // the `@` must be followed by a host character (so `"@scope/pkg"` is not an URL password).
-    regex: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s:@\/"'\\,{}\[\]<>`]*:)[^\s@\/"'\\,{}\[\]<>`]+(@)(?=[A-Za-z0-9_.\[-])/g,
-    replacement: '$1[REDACTED:url_password]$2',
+    // Raw TEXT / string values only (never an already serialized JSON line: structured writers scrub
+    // each string value BEFORE JSON.stringify, see stringifyScrubbed). The password is everything up to
+    // the LAST `@` that is followed by a host character, with no whitespace and no `/ ? #` (URL
+    // delimiters), so it may contain , ' " \ { } [ ] < > ` : and @ itself.
+    regex: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s:@\/?#]*:)[^\s\/?#]*@(?=[A-Za-z0-9_.\[-])/g,
+    replacement: '$1[REDACTED:url_password]@',
   },
 ];
 
@@ -182,8 +183,8 @@ const ADDED: ScrubPattern[] = [
 // specific sk-ant-/sk-proj-/xai- keys win before the reused header-only / generic ones.
 const SCRUB_PATTERNS: ScrubPattern[] = [...ADDED, ...REUSED];
 
-/** Bound recursion so a cyclic / pathological object can never hang. */
-const MAX_DEPTH = 6;
+/** Bound recursion so a cyclic / pathological object can never hang. Beyond it an object is collapsed (fail-closed). */
+const MAX_DEPTH = 24;
 
 // ============================================================================
 // Sensitive environment values (fail-closed for env-passed keys)
@@ -307,7 +308,7 @@ export function scrubValue(value: unknown, depth = 0): unknown {
   try {
     if (typeof value === 'string') return scrubSecrets(value);
     if (value === null || typeof value !== 'object') return value;
-    if (depth >= MAX_DEPTH) return value;
+    if (depth >= MAX_DEPTH) return '[REDACTED:max_depth]';
 
     if (Array.isArray(value)) {
       let changed = false;
@@ -333,5 +334,23 @@ export function scrubValue(value: unknown, depth = 0): unknown {
   } catch {
     // Fail-closed: collapse the unsafe payload rather than leaking it.
     return SCRUB_ERROR_PLACEHOLDER;
+  }
+}
+
+/**
+ * JSON.stringify that scrubs EVERY string value (any depth, no depth bound) before it is
+ * serialized. Use it wherever an object is written as JSON/JSONL: the scrubber then sees the RAW
+ * string (a password containing quotes, commas or backslashes is intact) and the output is valid
+ * JSON by construction. Never run scrubSecrets on an already serialized JSON line.
+ */
+export function stringifyScrubbed(value: unknown, space?: number): string {
+  try {
+    return JSON.stringify(
+      value,
+      (_key, v) => (typeof v === 'string' ? scrubSecrets(v) : v),
+      space,
+    );
+  } catch {
+    return JSON.stringify(SCRUB_ERROR_PLACEHOLDER);
   }
 }

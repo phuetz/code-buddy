@@ -6,8 +6,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { clearRememberedSecrets, scrubSecrets } from '../../src/security/secret-scrubber.js';
+import { clearRememberedSecrets, scrubSecrets, stringifyScrubbed } from '../../src/security/secret-scrubber.js';
 import * as scrubber from '../../src/security/secret-scrubber.js';
+import { auditLogger } from '../../src/security/audit-logger.js';
 import { RunStore } from '../../src/observability/run-store.js';
 import { SessionStore, type Session } from '../../src/persistence/session-store.js';
 import { exportSessionShareHtml } from '../../src/export/session-share.js';
@@ -157,30 +158,28 @@ describe('r2 : le JSON sérialisé doit rester du JSON (régression du motif d\'
   ];
   const OTHERS = ['@scope/pkg', 'a@b.c', '@types/node@20.1.0', 'name: x', 'C:\\\\Users\\\\x', 'say "hi"', '', '{"nested":"@scope/pkg"}'];
 
-  it('JSON.parse(scrubSecrets(ligne)) réussit toujours (échantillon systématique + graine fixe)', () => {
+  it('JSON.parse(stringifyScrubbed(objet)) réussit toujours (échantillon systématique + graine fixe)', () => {
     let seed = 20261006;
     const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
     const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)]!;
-    const lines: string[] = [];
+    const objects: unknown[] = [];
     for (const u of URLS) for (const o of OTHERS) {
-      lines.push(JSON.stringify({ url: u, package: o }));
-      lines.push(JSON.stringify({ a: o, url: u, b: o }));
-      lines.push(JSON.stringify({ type: 'tool_call', data: { args: { command: `curl ${u} -o out`, pkg: o }, urls: [u, o] } }));
+      objects.push({ url: u, package: o });
+      objects.push({ a: o, url: u, b: o });
+      objects.push({ type: 'tool_call', data: { args: { command: `curl ${u} -o out`, pkg: o }, urls: [u, o] } });
     }
     for (let i = 0; i < 400; i++) {
-      lines.push(JSON.stringify({ k1: pick(URLS) + pick(['', ' ', '"', ',', '/x']), k2: pick(OTHERS), n: [pick(URLS), pick(OTHERS), pick(URLS)], s: `${pick(OTHERS)} ${pick(URLS)} ${pick(OTHERS)}` }));
+      objects.push({ k1: pick(URLS) + pick(['', ' ', '"', ',', '/x']), k2: pick(OTHERS), n: [pick(URLS), pick(OTHERS), pick(URLS)], s: `${pick(OTHERS)} ${pick(URLS)} ${pick(OTHERS)}` });
     }
-    expect(lines.length).toBeGreaterThan(600);
-    for (const line of lines) {
-      const out = scrubSecrets(line);
-      // ÉCHOUE sur e2f70ae63 : {"url":"https://api.example.com","package":"@scope/pkg"} devenait du JSON invalide.
+    expect(objects.length).toBeGreaterThan(600);
+    for (const obj of objects) {
+      const out = stringifyScrubbed(obj);
       expect(() => JSON.parse(out), out).not.toThrow();
     }
   });
 
   it('la valeur parsée garde la même forme (mêmes clés) et masque encore le mot de passe', () => {
-    const line = JSON.stringify({ url: 'https://api.example.com', package: '@scope/pkg', db: 'postgres://app:S3cr3tPassw0rd@db:5432/p' });
-    const parsed = JSON.parse(scrubSecrets(line));
+    const parsed = JSON.parse(stringifyScrubbed({ url: 'https://api.example.com', package: '@scope/pkg', db: 'postgres://app:S3cr3tPassw0rd@db:5432/p' }));
     expect(Object.keys(parsed)).toEqual(['url', 'package', 'db']);
     expect(parsed.url).toBe('https://api.example.com');
     expect(parsed.package).toBe('@scope/pkg');
@@ -229,5 +228,113 @@ describe('r2 : noms d\'environnement en _KEY / _PASS', () => {
     const value = `public-${name.toLowerCase()}-0123456789`;
     process.env[name] = value;
     expect(scrubSecrets(`v=${value}`)).toBe(`v=${value}`);
+  });
+});
+
+describe('r3 : on masque les VALEURS avant JSON.stringify (propriété sur les vrais chemins d\'écriture)', () => {
+  // Alphabet hostile : tous les délimiteurs qui ont fait osciller le motif d'URL (hors / ? # espaces, delimiteurs d'URL).
+  const ALPHABET = "abcXYZ019-_.~!$&*+=;,'\"\\{}[]<>`@:";
+  const makePasswords = (n: number): string[] => {
+    let seed = 6102026;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    const out: string[] = [];
+    while (out.length < n) {
+      const len = 6 + Math.floor(rnd() * 9);
+      let pw = '';
+      for (let i = 0; i < len; i++) pw += ALPHABET[Math.floor(rnd() * ALPHABET.length)]!;
+      // un mot de passe fait d'au moins 3 caractères alphanumériques, qui ne se termine pas par '@' ni ':' seul
+      if ((pw.match(/[A-Za-z0-9]/g) ?? []).length >= 3 && !pw.endsWith('@')) out.push(pw);
+    }
+    return out;
+  };
+  const PASSWORDS = makePasswords(250);
+  const urlWith = (pw: string, scheme = 'postgres') => `${scheme}://svc:${pw}@db.internal:5432/app`;
+  // Un mot de passe « survit » si sa valeur complète est encore lisible dans la sortie.
+  const survives = (out: string, pw: string) => out.includes(pw);
+
+  it('texte brut : aucun mot de passe d\'URL aléatoire ne survit', () => {
+    for (const pw of PASSWORDS) {
+      // ÉCHOUE sur a0b785426 : les mots de passe contenant , ' " \ { } [ ] < > ` repassaient en clair.
+      expect(survives(scrubSecrets(`connect ${urlWith(pw)} now`), pw), pw).toBe(false);
+    }
+  });
+
+  it('events.jsonl (vrai RunStore) : JSON valide ET aucun mot de passe ne survit', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-sec-r3-'));
+    try {
+      const store = new RunStore(path.join(tmp, 'runs'));
+      const runId = store.startRun('r3', { source: 'cli' } as never);
+      for (const pw of PASSWORDS) {
+        store.emit(runId, { type: 'tool_call', data: { toolName: 'bash', args: { command: `psql ${urlWith(pw)} -c 'select 1'`, nested: { a: { b: { c: { d: { e: { f: { g: urlWith(pw, 'https') } } } } } } } } } } as never);
+      }
+      await store.flushRun(runId);
+      store.endRun(runId, 'completed');
+      await store.whenStreamsClosed();
+      const lines = fs.readFileSync(path.join(tmp, 'runs', runId, 'events.jsonl'), 'utf8').split('\n').filter(Boolean);
+      expect(lines.length).toBeGreaterThanOrEqual(PASSWORDS.length);
+      for (const l of lines) expect(() => JSON.parse(l)).not.toThrow();
+      const parsed = lines.map((l) => JSON.stringify(JSON.parse(l)));
+      for (const pw of PASSWORDS) {
+        const raw = lines.join('\n');
+        const decoded = parsed.join('\n');
+        expect(survives(raw, pw) || survives(decoded, pw), pw).toBe(false);
+        // la valeur décodée (après JSON.parse) ne doit pas non plus contenir le mot de passe
+        expect(survives(lines.map((l) => JSON.parse(l)).map((e) => JSON.stringify(e.data)).join('\n').replace(/\\\\/g, '\\').replace(/\\"/g, '"'), pw), pw).toBe(false);
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('audit-*.jsonl (vrai AuditLogger) : JSON valide ET aucun mot de passe ne survit', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-sec-r3-audit-'));
+    try {
+      auditLogger.init({ logDir: dir, sessionId: 'r3' });
+      for (const pw of PASSWORDS.slice(0, 120)) {
+        auditLogger.log({ action: 'bash_execute', decision: 'allow', source: 'test', target: urlWith(pw), details: `ran ${urlWith(pw, 'redis')}` } as never);
+      }
+      const lines = fs.readdirSync(dir).flatMap((f) => fs.readFileSync(path.join(dir, f), 'utf8').split('\n').filter(Boolean));
+      expect(lines.length).toBeGreaterThanOrEqual(120);
+      for (const l of lines) expect(() => JSON.parse(l)).not.toThrow();
+      const decoded = lines.map((l) => { const o = JSON.parse(l); return `${o.target}\n${o.details}`; }).join('\n');
+      for (const pw of PASSWORDS.slice(0, 120)) {
+        expect(survives(decoded, pw), pw).toBe(false);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('session enregistrée : JSON valide ET aucun mot de passe ne survit', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-sec-r3-sess-'));
+    const prev = process.env.CODEBUDDY_SESSIONS_DIR;
+    process.env.CODEBUDDY_SESSIONS_DIR = path.join(tmp, 'sessions');
+    try {
+      const pws = PASSWORDS.slice(0, 60);
+      const session = {
+        id: 'r3-session', name: 's', workingDirectory: '/workspace/demo', model: 'm',
+        createdAt: new Date('2026-10-06T08:00:00Z'), lastAccessedAt: new Date('2026-10-06T08:01:00Z'),
+        metadata: { tokenCount: 1, totalCost: 0 },
+        messages: pws.map((pw) => ({ type: 'user', content: `use ${urlWith(pw)}`, timestamp: '2026-10-06T08:00:00Z' })),
+      } as unknown as Session;
+      await new SessionStore({ useSQLite: false }).saveSession(session);
+      const files: string[] = [];
+      const walk = (d: string) => { for (const e of fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }) : []) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else files.push(p); } };
+      walk(path.join(tmp, 'sessions'));
+      const f = files.find((x) => x.includes('r3-session'))!;
+      const obj = JSON.parse(fs.readFileSync(f, 'utf8'));
+      const text = JSON.stringify(obj.messages.map((m: { content: string }) => m.content));
+      const decoded = obj.messages.map((m: { content: string }) => m.content).join('\n');
+      for (const pw of pws) expect(survives(decoded, pw) || survives(text, pw), pw).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.CODEBUDDY_SESSIONS_DIR; else process.env.CODEBUDDY_SESSIONS_DIR = prev;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('une URL sans identifiants, un chemin avec @ et un paquet scopé ne sont pas modifiés', () => {
+    for (const t of ['https://api.example.com', 'http://localhost:8080/a@b.com', 'https://x.io/p?e=u@v.org', '@scope/pkg', 'git@github.com:o/r.git']) {
+      expect(scrubSecrets(t)).toBe(t);
+    }
   });
 });

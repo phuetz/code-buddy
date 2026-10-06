@@ -26,7 +26,7 @@ import { logger } from '../utils/logger.js';
 import { executeHermesLifecycleHook } from '../hooks/hermes-lifecycle-hooks.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { auditLogger } from '../security/audit-logger.js';
-import { scrubSecrets, scrubValue } from '../security/secret-scrubber.js';
+import { scrubSecrets, scrubValue, stringifyScrubbed } from '../security/secret-scrubber.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -474,7 +474,7 @@ export class RunStore {
       buffer.push(fullEvent);
     }
 
-    this.eventWriters.get(runId)?.write(scrubSecrets(JSON.stringify(fullEvent)) + '\n');
+    this.eventWriters.get(runId)?.write(stringifyScrubbed(fullEvent) + '\n');
 
     // Update in-memory count
     const count = (this.eventCounts.get(runId) || 0) + 1;
