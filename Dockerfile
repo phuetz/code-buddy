@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy package files
 COPY package*.json ./
+COPY vendor ./vendor
 
 # Install dependencies (including devDependencies for build)
 RUN npm ci
@@ -115,6 +116,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy package files and install
 COPY package*.json ./
+COPY vendor ./vendor
 RUN npm ci
 
 # Copy source
