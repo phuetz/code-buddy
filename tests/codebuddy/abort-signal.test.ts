@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createAbortError, combineAbortSignals } from '@/codebuddy/abort-signal.js';
 
 /**
@@ -200,6 +200,27 @@ describe('combineAbortSignals — single abort', () => {
 
       expect(combined?.aborted).toBe(true);
       expect(abortCount).toBe(1);
+    });
+  });
+  it('registers one-shot listeners on every input and keeps the first reason (fallback path)', async () => {
+    await withoutAbortSignalAny(async () => {
+      const a = new AbortController();
+      const b = new AbortController();
+      const spyA = vi.spyOn(a.signal, 'addEventListener');
+      const spyB = vi.spyOn(b.signal, 'addEventListener');
+
+      const combined = combineAbortSignals(a.signal, b.signal);
+
+      for (const spy of [spyA, spyB]) {
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith('abort', expect.any(Function), { once: true });
+      }
+
+      a.abort('premier');
+      b.abort('deuxième');
+      await flush();
+
+      expect(combined?.reason).toBe('premier');
     });
   });
 });
