@@ -192,7 +192,7 @@ export class AgentState extends EventEmitter {
     inputTokens: number,
     outputTokens: number,
     model: string,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: { promptTokens: number; completionTokens: number; costUsd?: number }
   ): void {
     // Keep the historical 3-argument contract when no provider usage is known:
     // callers and tests spy on `calculateCost(input, output, model)` exactly.
@@ -202,7 +202,11 @@ export class AgentState extends EventEmitter {
     this.sessionCost += cost;
     const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    if (providerUsage?.costUsd !== undefined) {
+      this.costTracker.recordUsage(effectiveInput, effectiveOutput, model, providerUsage.costUsd);
+    } else {
+      this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    }
     this.emit("cost:recorded", { cost, total: this.sessionCost });
 
     if (this.isSessionCostLimitReached()) {

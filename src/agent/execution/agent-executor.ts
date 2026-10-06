@@ -524,7 +524,7 @@ export interface ExecutorConfig {
   /** Returns true if current model is a Grok model (enables web search) */
   isGrokModel: () => boolean;
   /** Records token usage for cost tracking (additive — call once per turn) */
-  recordSessionCost: (input: number, output: number, providerUsage?: { promptTokens: number; completionTokens: number }) => void;
+  recordSessionCost: (input: number, output: number, providerUsage?: { promptTokens: number; completionTokens: number; costUsd?: number }) => void;
   /**
    * Optional: publishes the counters the PROVIDER reported for the turn, summed
    * over every round. Called exactly once per turn — with `undefined` when no
@@ -1353,6 +1353,7 @@ export class AgentExecutor {
     let providerPromptTokens = 0;
     let providerCompletionTokens = 0;
     let providerUsageSeen = false;
+    let providerCostUsd: number | undefined;
     let sessionCostRecorded = false;
     const recordTurnCost = (): void => {
       if (sessionCostRecorded) return;
@@ -1360,7 +1361,11 @@ export class AgentExecutor {
       try {
         // Pass provider usage when available (takes precedence over local estimates)
         const providerUsage = providerUsageSeen
-          ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
+          ? {
+              promptTokens: providerPromptTokens,
+              completionTokens: providerCompletionTokens,
+              ...(providerCostUsd !== undefined ? { costUsd: providerCostUsd } : {}),
+            }
           : undefined;
         // Only pass provider usage when the provider reported one, so the
         // historical two-argument call (and its tests) stays byte-identical.
@@ -1963,6 +1968,9 @@ export class AgentExecutor {
           providerUsageSeen = true;
           providerPromptTokens += roundProviderUsage.promptTokens ?? 0;
           providerCompletionTokens += roundProviderUsage.completionTokens ?? 0;
+          if (roundProviderUsage.costUsd !== undefined) {
+            providerCostUsd = (providerCostUsd ?? 0) + roundProviderUsage.costUsd;
+          }
         }
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 

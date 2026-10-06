@@ -2302,7 +2302,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
   private recordSessionCost(
     inputTokens: number,
     outputTokens: number,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: { promptTokens: number; completionTokens: number; costUsd?: number }
   ): void {
     const model = this.codebuddyClient.getCurrentModel();
     const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage);
@@ -2312,7 +2312,11 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // Record usage with effective tokens (provider if available, otherwise local estimate)
     const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    if (providerUsage?.costUsd !== undefined) {
+      this.costTracker.recordUsage(effectiveInput, effectiveOutput, model, providerUsage.costUsd);
+    } else {
+      this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    }
 
     // Store provider usage for extended cost info retrieval
     if (providerUsage) {

@@ -102,6 +102,8 @@ export interface RawStreamingChunk {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    /** Real billed cost in USD when the gateway reports it (OpenRouter `usage.cost`). */
+    cost?: number;
   };
 }
 
@@ -112,6 +114,8 @@ export interface RawStreamingChunk {
 export interface ProviderStreamUsage {
   promptTokens?: number;
   completionTokens?: number;
+  /** Cost billed by the gateway, USD (OpenRouter `usage.cost`). Absent when not reported. */
+  costUsd?: number;
 }
 
 function normalizeUsageCount(value: number | undefined): number | undefined {
@@ -560,10 +564,15 @@ export class StreamingHandler {
     if (!usage) return;
     const promptTokens = normalizeUsageCount(usage.prompt_tokens);
     const completionTokens = normalizeUsageCount(usage.completion_tokens);
-    if (promptTokens === undefined && completionTokens === undefined) return;
+    const costUsd =
+      typeof usage.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0
+        ? usage.cost
+        : undefined;
+    if (promptTokens === undefined && completionTokens === undefined && costUsd === undefined) return;
     this.providerUsage = {
       ...(promptTokens !== undefined ? { promptTokens } : {}),
       ...(completionTokens !== undefined ? { completionTokens } : {}),
+      ...(costUsd !== undefined ? { costUsd } : {}),
     };
   }
 

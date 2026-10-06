@@ -235,8 +235,13 @@ export class CostTracker extends EventEmitter {
     outputTokens: number,
     model: string,
     cachedTokens: number = 0,
-    providerUsage?: { promptTokens: number; completionTokens: number }
+    providerUsage?: { promptTokens: number; completionTokens: number; costUsd?: number }
   ): number {
+    // The gateway's own billed amount (OpenRouter `usage.cost`) beats any
+    // price-table estimate — models absent from the table priced at 0 before.
+    if (typeof providerUsage?.costUsd === 'number' && Number.isFinite(providerUsage.costUsd) && providerUsage.costUsd >= 0) {
+      return providerUsage.costUsd;
+    }
     // Use provider-reported tokens when available
     const effectiveInput = providerUsage?.promptTokens ?? (inputTokens - cachedTokens + (cachedTokens * 0.5));
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
@@ -291,8 +296,10 @@ export class CostTracker extends EventEmitter {
   /**
    * Record token usage
    */
-  recordUsage(inputTokens: number, outputTokens: number, model: string): TokenUsage {
-    const cost = this.calculateCost(inputTokens, outputTokens, model);
+  recordUsage(inputTokens: number, outputTokens: number, model: string, costUsd?: number): TokenUsage {
+    const cost = typeof costUsd === 'number' && Number.isFinite(costUsd) && costUsd >= 0
+      ? costUsd
+      : this.calculateCost(inputTokens, outputTokens, model);
     const usage: TokenUsage = {
       inputTokens,
       outputTokens,
