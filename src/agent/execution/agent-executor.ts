@@ -2715,7 +2715,9 @@ export class AgentExecutor {
       // may be partial mocks — fall through to estimateCost when it's absent.
       const streamTurnCost = this.deps.client.isSubscriptionAuth?.()
         ? 0
-        : estimateCost(
+        : providerCostUsd !== undefined
+          ? providerCostUsd
+          : estimateCost(
             totalInputTokensForCost,
             totalOutputTokens,
             undefined,
