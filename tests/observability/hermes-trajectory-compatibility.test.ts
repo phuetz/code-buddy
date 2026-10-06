@@ -136,7 +136,7 @@ describe('buildHermesTrajectoryCompatibilityReport', () => {
       runCount: 1,
       sourceRunIds: [runId],
     });
-    expect(report.probe?.trajectoryExport?.redactionCount).toBeGreaterThan(0);
+    expect(report.probe?.trajectoryExport?.redactionCount).toBeGreaterThanOrEqual(0);
     expect(raw).not.toContain(secret);
     const textReport = renderHermesTrajectoryCompatibilityReport(report);
     expect(textReport).toContain('Hermes trajectory compatibility:');

@@ -606,8 +606,10 @@ export class RunStore {
     this.ensureDir(artifactsDir);
 
     const filePath = path.join(artifactsDir, name);
-    fs.writeFileSync(filePath, content, 'utf-8');
-    this.indexArtifactForSearch(runId, name, content);
+    // commands.log, test-results.log, output.md, patch.diff... can carry tokens printed by a command.
+    const safeContent = scrubSecrets(content);
+    fs.writeFileSync(filePath, safeContent, 'utf-8');
+    this.indexArtifactForSearch(runId, name, safeContent);
 
     const summary = this.summaries.get(runId);
     if (summary) {

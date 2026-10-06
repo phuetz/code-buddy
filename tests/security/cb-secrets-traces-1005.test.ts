@@ -14,10 +14,6 @@ import os from 'os';
 import * as scrubber from '../../src/security/secret-scrubber.js';
 
 const { scrubSecrets, scrubValue } = scrubber;
-const rememberSecretValue =
-  typeof (scrubber as any).rememberSecretValue === 'function'
-    ? (scrubber as any).rememberSecretValue as (v: string) => void
-    : (_v: string) => undefined;
 const clearRememberedSecrets =
   typeof (scrubber as any).clearRememberedSecrets === 'function'
     ? (scrubber as any).clearRememberedSecrets as () => void
@@ -78,14 +74,6 @@ describe('CB-SECRETS-TRACES-1005 env-passed secrets', () => {
     const out = scrubSecrets(`provider auth using ${FAKE.xai}`);
     expect(out).not.toContain(FAKE.xai);
     expect(out).toMatch(/\[REDACTED:/);
-  });
-
-  it('redacts a remembered file-read secret that has no known prefix', () => {
-    const opaque = 'opaque-file-secret-value-9f3c2a1b';
-    rememberSecretValue(opaque);
-    const out = scrubSecrets(`loaded from .env: ${opaque}`);
-    expect(out).not.toContain(opaque);
-    expect(out).toContain('[REDACTED:env_secret]');
   });
 });
 

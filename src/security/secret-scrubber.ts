@@ -46,7 +46,7 @@ const SCRUB_ERROR_PLACEHOLDER = '[REDACTED:scrub_error]';
  * (historically: `xai-` leaked through logger + audit JSONL).
  */
 const SENTINEL_RE =
-  /sk-|sk_|xai-|xox|AKIA|ghp_|github_pat_|glpat-|AIza|hf_|dop_v1_|SG\.|npm_|pypi-|sb_(?:secret|publishable)_|vc[piark]_|AccountKey=|-----BEGIN|Bearer |eyJ|(?:SK|AC)[0-9a-fA-F]{32}/;
+  /sk-|sk_|xai-|xox|AKIA|ghp_|github_pat_|glpat-|AIza|hf_|dop_v1_|SG\.|npm_|pypi-|sb_(?:secret|publishable)_|vc[piark]_|AccountKey=|-----BEGIN|Bearer |Basic |:\/\/[^\s@\/]*:[^\s@\/]*@|eyJ|(?:SK|AC)[0-9a-fA-F]{32}/i;
 
 // ============================================================================
 // Scrub patterns
@@ -140,7 +140,7 @@ const ADDED: ScrubPattern[] = [
   // pattern gap); kept here as well as via REUSED so the label is stable even
   // if SECRET_PATTERNS ordering changes.
   {
-    regex: /(?<![A-Za-z0-9-])xai-[A-Za-z0-9_-]{20,}/g,
+    regex: /(?<![A-Za-z0-9-])xai-[A-Za-z0-9_-]{20,}/gi,
     replacement: '[REDACTED:xai_key]',
   },
   // GitHub classic PAT — open-ended length so trailing body chars cannot leak
@@ -158,10 +158,20 @@ const ADDED: ScrubPattern[] = [
     regex: /xox[a-z]-[A-Za-z0-9-]{10,}/g,
     replacement: '[REDACTED:slack_token]',
   },
-  // Generic long Bearer token — keep the scheme, drop the credential.
+  // Generic long Bearer token — keep the scheme, drop the credential (any case).
   {
-    regex: /Bearer\s+[A-Za-z0-9._~+/=-]{20,}/g,
+    regex: /Bearer\s+[A-Za-z0-9._~+/=-]{20,}/gi,
     replacement: 'Bearer [REDACTED:bearer_token]',
+  },
+  // HTTP Basic credentials in an Authorization header (base64 of user:password).
+  {
+    regex: /(Authorization["']?\s*[:=]\s*["']?)Basic\s+[A-Za-z0-9+/]{6,}={0,2}/gi,
+    replacement: '$1Basic [REDACTED:basic_auth]',
+  },
+  // Password inside a URL: scheme://user:password@host (postgres, https, redis, amqp, ...).
+  {
+    regex: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s:@\/]*:)[^\s@\/]+(@)/g,
+    replacement: '$1[REDACTED:url_password]$2',
   },
 ];
 
@@ -183,52 +193,50 @@ const MAX_DEPTH = 6;
  * values are never treated as secrets.
  */
 const SENSITIVE_ENV_NAME_RE =
-  /(?:API_?KEY|ACCESS_?KEY|SECRET|PASSWORD|PASSWD|AUTH_TOKEN|PRIVATE_KEY|ACCESS_TOKEN|GROK_API_KEY|XAI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|GH_TOKEN|AWS_SECRET|AWS_ACCESS_KEY_ID|HF_TOKEN|NPM_TOKEN|VERCEL_TOKEN)$/i;
-
-/** Extra values registered at runtime (file-read secrets, tool results, …). */
-const rememberedSecrets = new Set<string>();
+  /(?:API_?KEY|ACCESS_?KEY|SECRET(?:_?KEY)?|PASSWORD|PASSWD|PASSPHRASE|(?:AUTH_?|ACCESS_?|REFRESH_?|BOT_?|SESSION_?|API_?)?TOKEN|PRIVATE_?KEY|SERVICE_?ROLE_?KEY|CLIENT_?SECRET|CREDENTIALS?|CONNECTION_?STRING|DATABASE_?URL|AWS_ACCESS_KEY_ID)$/i;
 
 let envCacheFingerprint = '';
 let envCacheValues: string[] = [];
+/** Names of env vars that were sensitive at the last full scan (their VALUES are re-read each call). */
+let envSensitiveNames: string[] = [];
 
+/**
+ * Cheap invalidation: the env key names (a variable added, removed or renamed) plus
+ * the CURRENT VALUES of the sensitive variables found at the last scan, so a
+ * rotated token of the same length is noticed. The values are only compared as
+ * strings, never logged or stored beyond the cache.
+ */
 function envFingerprint(): string {
-  // Cheap, stable enough for hot-path caching. Recomputes when env size changes
-  // (typical for tests that set/unset keys between cases).
-  return `${Object.keys(process.env).length}:${process.env.PATH?.length ?? 0}:${process.env.XAI_API_KEY?.length ?? 0}:${process.env.GROK_API_KEY?.length ?? 0}:${process.env.OPENAI_API_KEY?.length ?? 0}:${process.env.ANTHROPIC_API_KEY?.length ?? 0}:${process.env.GITHUB_TOKEN?.length ?? 0}:${process.env.AWS_ACCESS_KEY_ID?.length ?? 0}`;
+  // Key NAMES (a variable added/removed/renamed, even with the same count) ...
+  let fp = Object.keys(process.env).join('\u0001');
+  for (const name of envSensitiveNames) fp += `\u0000${process.env[name] ?? ''}`;
+  return fp;
 }
 
 function getEnvSecretValues(): string[] {
   const fp = envFingerprint();
   if (fp === envCacheFingerprint) return envCacheValues;
   const values: string[] = [];
+  const names: string[] = [];
   for (const [name, value] of Object.entries(process.env)) {
-    if (!value || value.length < 8) continue;
     if (!SENSITIVE_ENV_NAME_RE.test(name)) continue;
+    names.push(name);
+    if (!value || value.length < 8) continue;
     // Skip obvious non-secrets (booleans, tiny flags, file paths without entropy).
     if (/^(true|false|1|0|yes|no)$/i.test(value)) continue;
     values.push(value);
   }
-  envCacheFingerprint = fp;
+  envSensitiveNames = names;
+  envCacheFingerprint = envFingerprint();
   envCacheValues = values;
   return values;
 }
 
-/**
- * Remember an exact secret value for subsequent scrubbing. Used when an agent
- * reads a secrets file or when callers want fail-closed coverage for opaque
- * strings that do not match a known token shape. Values shorter than 8 chars
- * are ignored (too ambiguous). Idempotent.
- */
-export function rememberSecretValue(value: string): void {
-  if (typeof value !== 'string' || value.length < 8) return;
-  rememberedSecrets.add(value);
-}
-
-/** Test/helper: drop every remembered value (does not clear process.env). */
+/** Test/helper: drop the environment cache (does not clear process.env). */
 export function clearRememberedSecrets(): void {
-  rememberedSecrets.clear();
   envCacheFingerprint = '';
   envCacheValues = [];
+  envSensitiveNames = [];
 }
 
 function redactExactValues(text: string, values: Iterable<string>): string {
@@ -254,18 +262,13 @@ export function scrubSecrets(text: string): string {
   if (typeof text !== 'string' || text.length === 0) return text;
   try {
     const envSecrets = getEnvSecretValues();
-    const hasRemembered =
-      rememberedSecrets.size > 0 || envSecrets.length > 0;
+    const hasRemembered = envSecrets.length > 0;
 
     // Fast path: no tell-tale prefix AND no remembered/env secret ⇒ nothing to do.
     if (!SENTINEL_RE.test(text)) {
       if (!hasRemembered) return text;
       // Still may need exact-value redaction even without a known prefix.
-      const exact = redactExactValues(
-        redactExactValues(text, envSecrets),
-        rememberedSecrets,
-      );
-      return exact;
+      return redactExactValues(text, envSecrets);
     }
 
     let out = text;
@@ -274,7 +277,7 @@ export function scrubSecrets(text: string): string {
       out = out.replace(regex, replacement);
     }
     if (hasRemembered) {
-      out = redactExactValues(redactExactValues(out, envSecrets), rememberedSecrets);
+      out = redactExactValues(out, envSecrets);
     }
     return out;
   } catch {
