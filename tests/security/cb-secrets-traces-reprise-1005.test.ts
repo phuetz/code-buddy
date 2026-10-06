@@ -141,3 +141,93 @@ describe('variables d\'environnement sensibles', () => {
     expect((scrubber as Record<string, unknown>).rememberSecretValue).toBeUndefined();
   });
 });
+
+describe('r2 : le JSON sérialisé doit rester du JSON (régression du motif d\'URL)', () => {
+  const URLS = [
+    'https://api.example.com',
+    'https://api.example.com/v1/items?id=3',
+    'http://localhost:8080',
+    'http://localhost:8080/health',
+    'https://user:hunter2hunter2@git.example.com/org/repo.git',
+    'postgres://app:S3cr3tPassw0rd@db.internal:5432/prod',
+    'redis://:onlypassword123@cache:6379',
+    'git@github.com:phuetz/code-buddy.git',
+    'ssh://git@github.com/org/repo.git',
+    'mailto:dev@example.com',
+  ];
+  const OTHERS = ['@scope/pkg', 'a@b.c', '@types/node@20.1.0', 'name: x', 'C:\\\\Users\\\\x', 'say "hi"', '', '{"nested":"@scope/pkg"}'];
+
+  it('JSON.parse(scrubSecrets(ligne)) réussit toujours (échantillon systématique + graine fixe)', () => {
+    let seed = 20261006;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+    const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)]!;
+    const lines: string[] = [];
+    for (const u of URLS) for (const o of OTHERS) {
+      lines.push(JSON.stringify({ url: u, package: o }));
+      lines.push(JSON.stringify({ a: o, url: u, b: o }));
+      lines.push(JSON.stringify({ type: 'tool_call', data: { args: { command: `curl ${u} -o out`, pkg: o }, urls: [u, o] } }));
+    }
+    for (let i = 0; i < 400; i++) {
+      lines.push(JSON.stringify({ k1: pick(URLS) + pick(['', ' ', '"', ',', '/x']), k2: pick(OTHERS), n: [pick(URLS), pick(OTHERS), pick(URLS)], s: `${pick(OTHERS)} ${pick(URLS)} ${pick(OTHERS)}` }));
+    }
+    expect(lines.length).toBeGreaterThan(600);
+    for (const line of lines) {
+      const out = scrubSecrets(line);
+      // ÉCHOUE sur e2f70ae63 : {"url":"https://api.example.com","package":"@scope/pkg"} devenait du JSON invalide.
+      expect(() => JSON.parse(out), out).not.toThrow();
+    }
+  });
+
+  it('la valeur parsée garde la même forme (mêmes clés) et masque encore le mot de passe', () => {
+    const line = JSON.stringify({ url: 'https://api.example.com', package: '@scope/pkg', db: 'postgres://app:S3cr3tPassw0rd@db:5432/p' });
+    const parsed = JSON.parse(scrubSecrets(line));
+    expect(Object.keys(parsed)).toEqual(['url', 'package', 'db']);
+    expect(parsed.url).toBe('https://api.example.com');
+    expect(parsed.package).toBe('@scope/pkg');
+    expect(parsed.db).toBe('postgres://app:[REDACTED:url_password]@db:5432/p');
+  });
+
+  it('un events.jsonl scrubbé se recharge de bout en bout, sans événement perdu', async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-sec-r2-'));
+    try {
+      const store = new RunStore(path.join(tmp, 'runs'));
+      const runId = store.startRun('deploy', { source: 'cli' } as never);
+      store.emit(runId, { type: 'tool_call', data: { toolName: 'web_fetch', args: { url: 'https://api.example.com', package: '@scope/pkg' } } } as never);
+      store.emit(runId, { type: 'tool_result', data: { output: 'ok postgres://app:S3cr3tPassw0rd@db:5432/p and a@b.c', success: true } } as never);
+      store.emit(runId, { type: 'error', data: { message: 'failed https://x.example.com","y":"@scope/pkg' } } as never);
+      await store.flushRun(runId);
+      store.endRun(runId, 'completed');
+      await store.whenStreamsClosed();
+      const raw = fs.readFileSync(path.join(tmp, 'runs', runId, 'events.jsonl'), 'utf8').split('\n').filter(Boolean);
+      const parsed = raw.map((l) => JSON.parse(l));
+      expect(parsed.length).toBeGreaterThanOrEqual(5);
+      expect(raw.join('\n')).not.toContain('S3cr3tPassw0rd');
+      const reloaded = new RunStore(path.join(tmp, 'runs')).getEvents(runId);
+      expect(reloaded.length).toBe(parsed.length);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('r2 : noms d\'environnement en _KEY / _PASS', () => {
+  const secretNames = ['OPENAI_KEY', 'ANTHROPIC_KEY', 'SIGNING_KEY', 'MASTER_KEY', 'DB_PASS', 'SMTP_PASS'];
+  const publicNames = ['STRIPE_PUBLISHABLE_KEY', 'APP_PUBLIC_KEY', 'SORT_KEY', 'CACHE_KEY'];
+  afterEach(() => {
+    for (const n of [...secretNames, ...publicNames]) delete process.env[n];
+    clearRememberedSecrets();
+  });
+
+  it.each(secretNames)('%s : valeur masquée', (name) => {
+    const value = `opaque-${name.toLowerCase()}-0123456789`;
+    process.env[name] = value;
+    // ÉCHOUE sur e2f70ae63 : ces noms n'étaient pas reconnus.
+    expect(scrubSecrets(`v=${value}`)).not.toContain(value);
+  });
+
+  it.each(publicNames)('%s : valeur publique non masquée (exclusion)', (name) => {
+    const value = `public-${name.toLowerCase()}-0123456789`;
+    process.env[name] = value;
+    expect(scrubSecrets(`v=${value}`)).toBe(`v=${value}`);
+  });
+});

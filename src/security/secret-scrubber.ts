@@ -170,7 +170,10 @@ const ADDED: ScrubPattern[] = [
   },
   // Password inside a URL: scheme://user:password@host (postgres, https, redis, amqp, ...).
   {
-    regex: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s:@\/]*:)[^\s@\/]+(@)/g,
+    // Classes exclude quotes, backslash and JSON/markup punctuation so the mask stays INSIDE one
+    // serialized JSON string (a JSONL line must still parse) and never crosses a token end;
+    // the `@` must be followed by a host character (so `"@scope/pkg"` is not an URL password).
+    regex: /([a-zA-Z][a-zA-Z0-9+.-]*:\/\/[^\s:@\/"'\\,{}\[\]<>`]*:)[^\s@\/"'\\,{}\[\]<>`]+(@)(?=[A-Za-z0-9_.\[-])/g,
     replacement: '$1[REDACTED:url_password]$2',
   },
 ];
@@ -193,7 +196,15 @@ const MAX_DEPTH = 6;
  * values are never treated as secrets.
  */
 const SENSITIVE_ENV_NAME_RE =
-  /(?:API_?KEY|ACCESS_?KEY|SECRET(?:_?KEY)?|PASSWORD|PASSWD|PASSPHRASE|(?:AUTH_?|ACCESS_?|REFRESH_?|BOT_?|SESSION_?|API_?)?TOKEN|PRIVATE_?KEY|SERVICE_?ROLE_?KEY|CLIENT_?SECRET|CREDENTIALS?|CONNECTION_?STRING|DATABASE_?URL|AWS_ACCESS_KEY_ID)$/i;
+  /(?:API_?KEY|ACCESS_?KEY|SECRET(?:_?KEY)?|PASSWORD|PASSWD|PASSPHRASE|(?:AUTH_?|ACCESS_?|REFRESH_?|BOT_?|SESSION_?|API_?)?TOKEN|PRIVATE_?KEY|SERVICE_?ROLE_?KEY|CLIENT_?SECRET|CREDENTIALS?|CONNECTION_?STRING|DATABASE_?URL|AWS_ACCESS_KEY_ID|_KEY|_PASS)$/i;
+
+/**
+ * Names ending in _KEY / _PASS that are NOT secrets (public or purely technical values). Excluded
+ * so ordinary text containing them is not over-redacted: PUBLIC_KEY, PUBLISHABLE_KEY, SORT_KEY,
+ * CACHE_KEY, PRIMARY_KEY, FOREIGN_KEY, ROUTE_KEY, I18N_KEY, TRANSLATION_KEY, FEATURE_KEY.
+ */
+const NON_SECRET_ENV_NAME_RE =
+  /(?:PUBLIC|PUBLISHABLE|SORT|CACHE|PRIMARY|FOREIGN|ROUTE|I18N|TRANSLATION|FEATURE)_?KEY$/i;
 
 let envCacheFingerprint = '';
 let envCacheValues: string[] = [];
@@ -219,7 +230,7 @@ function getEnvSecretValues(): string[] {
   const values: string[] = [];
   const names: string[] = [];
   for (const [name, value] of Object.entries(process.env)) {
-    if (!SENSITIVE_ENV_NAME_RE.test(name)) continue;
+    if (!SENSITIVE_ENV_NAME_RE.test(name) || NON_SECRET_ENV_NAME_RE.test(name)) continue;
     names.push(name);
     if (!value || value.length < 8) continue;
     // Skip obvious non-secrets (booleans, tiny flags, file paths without entropy).
