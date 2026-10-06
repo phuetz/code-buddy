@@ -165,7 +165,19 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /** Only allow data:image/*;base64,... — never raw HTML attribute breakouts. */
+  var SAFE_DATA_IMAGE = /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+=*$/i;
+
+  function safeDataImageUrl(dataUrl) {
+    if (typeof dataUrl !== 'string') return '';
+    var trimmed = dataUrl.trim();
+    if (!SAFE_DATA_IMAGE.test(trimmed)) return '';
+    if (byteLen(trimmed) > MAX_IMAGE_CHARS) return '';
+    return trimmed;
   }
 
   function linkify(escaped) {
@@ -276,8 +288,9 @@
   }
 
   function constrainDataUrl(dataUrl, maxChars) {
-    if (!dataUrl) return '';
-    if (byteLen(dataUrl) <= maxChars) return dataUrl;
+    var safe = safeDataImageUrl(dataUrl);
+    if (!safe) return '';
+    if (byteLen(safe) <= maxChars) return safe;
     return '';
   }
 
@@ -304,8 +317,9 @@
   }
 
   function imageHtml(dataUrl) {
-    if (!dataUrl) return '';
-    return '<img class="bubble-img selfie" alt="Image" src="' + dataUrl + '">';
+    var safe = safeDataImageUrl(dataUrl);
+    if (!safe) return '';
+    return '<img class="bubble-img selfie" alt="Image" src="' + safe + '">';
   }
 
   function sentImagesHtml(images) {
@@ -313,17 +327,22 @@
     var html = '<div class="bubble-photos">';
     var i;
     for (i = 0; i < images.length; i += 1) {
-      html += '<img class="bubble-img sent" alt="Photo envoyée" src="' + images[i] + '">';
+      var safe = safeDataImageUrl(images[i]);
+      if (!safe) continue;
+      html += '<img class="bubble-img sent" alt="Photo envoyée" src="' + safe + '">';
     }
     return html + '</div>';
   }
 
   function dataUrlFromFrame(image) {
     if (!image || typeof image.data !== 'string' || typeof image.mimeType !== 'string') return '';
+    if (!/^[A-Za-z0-9+/]+=*$/.test(image.data)) return '';
     var mime = image.mimeType === 'image/jpeg' || image.mimeType === 'image/webp'
       ? image.mimeType
-      : 'image/png';
-    return 'data:' + mime + ';base64,' + image.data;
+      : image.mimeType === 'image/gif'
+        ? 'image/gif'
+        : 'image/png';
+    return safeDataImageUrl('data:' + mime + ';base64,' + image.data);
   }
 
   function startOfDay(ts) {
@@ -555,13 +574,17 @@
   }
 
   function highlightSearch(html) {
-    var q = (state.searchQuery || '').trim();
+    var q = state.searchQuery;
     if (!q) return html;
     var safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     try {
-      return html.replace(new RegExp(safe, 'gi'), function (match) {
-        return '<mark class="search-hit">' + match + '</mark>';
-      });
+      var re = new RegExp(safe, 'gi');
+      return String(html).split(/(<[^>]+>)/g).map(function (part) {
+        if (!part || part.charAt(0) === '<') return part;
+        return part.replace(re, function (match) {
+          return '<mark class="search-hit">' + match + '</mark>';
+        });
+      }).join('');
     } catch (_err) {
       return html;
     }

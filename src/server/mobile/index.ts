@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { logger } from '../../utils/logger.js';
 import { isDirectLoopbackRequest } from '../middleware/auth.js';
 import { verifyToken } from '../auth/jwt.js';
+import { isDeviceAccessTokenActive } from '../auth/device-token.js';
 import { listAlbum, readAlbumEntry } from './album.js';
 import { buildMobileStatus } from './status.js';
 import { readConversationLog } from '../../companion/mobile-conversation-log.js';
@@ -74,7 +75,7 @@ mobilePwaRouter.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Referrer-Policy', 'no-referrer');
   next();
 });
 
@@ -120,18 +121,26 @@ mobilePwaRouter.use(
  * The album carries the couple's photos, so unlike the PWA shell it is NOT
  * public. This router is mounted BEFORE the global auth middleware (the shell
  * has to be reachable without a token), so the guard is enforced here: a valid
- * JWT, or a DIRECT loopback request — the same standard `requireLocal-
- * AnonymousAccess` applies, no proxy assertion is trusted.
+ * (and, for device tokens, non-revoked) JWT. Direct loopback may read (GET)
+ * without a token for local tooling; POST/DELETE always require a JWT so a
+ * foreign page cannot CSRF favorite/delete against 127.0.0.1. No proxy
+ * assertion is trusted.
  */
 export function requireAlbumAccess(req: Request, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
   const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : '';
   const secret = process.env.JWT_SECRET ?? '';
-  if (token && secret && verifyToken(token, secret)) {
+  const payload = token && secret ? verifyToken(token, secret) : null;
+  // Device tokens must still be active in the device store (revocation / anti-replay).
+  if (payload && isDeviceAccessTokenActive(payload)) {
     next();
     return;
   }
-  if (isDirectLoopbackRequest(req.socket.remoteAddress, req.headers)) {
+  const method = (req.method || 'GET').toUpperCase();
+  const mutating = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+  // Mutations always need a JWT (CSRF: a local page cannot favorite/delete via form).
+  // Safe GETs keep the direct-loopback exception for local tooling.
+  if (!mutating && isDirectLoopbackRequest(req.socket.remoteAddress, req.headers)) {
     next();
     return;
   }

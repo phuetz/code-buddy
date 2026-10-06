@@ -6,6 +6,7 @@ import {
   forwardMobileTextToTelegram,
   isTelegramForwardConfigured,
 } from '../../src/server/mobile/telegram-forward.js';
+import { createUserToken } from '../../src/server/auth/jwt.js';
 
 describe('mobile Telegram forward (lot 1)', () => {
   const previousToken = process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
@@ -53,10 +54,14 @@ describe('mobile Telegram forward (lot 1)', () => {
     expect(seen).toEqual(['bonjour']);
   });
 
-  it('POST /forward answers 404 when the channel is absent (loopback)', async () => {
+  it('POST /forward answers 404 when the channel is absent (JWT required even on loopback)', async () => {
     delete process.env.CODEBUDDY_SENSORY_ALERT_TOKEN;
     delete process.env.CODEBUDDY_SENSORY_ALERT_CHAT;
     delete process.env.TELEGRAM_BOT_TOKEN;
+    const secret = 'mobile-forward-secu-1005-secret-32b';
+    const previousSecret = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = secret;
+    const token = createUserToken('mobile', ['chat'], secret, '1h');
     const app = express();
     app.use('/__codebuddy__/mobile', mobilePwaRouter);
     const server = await new Promise<http.Server>((resolve) => {
@@ -65,9 +70,18 @@ describe('mobile Telegram forward (lot 1)', () => {
     try {
       const address = server.address();
       if (!address || typeof address === 'string') throw new Error('expected a TCP port');
-      const res = await fetch(`http://127.0.0.1:${address.port}/__codebuddy__/mobile/forward`, {
+      const denied = await fetch(`http://127.0.0.1:${address.port}/__codebuddy__/mobile/forward`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'hello' }),
+      });
+      expect(denied.status).toBe(401);
+      const res = await fetch(`http://127.0.0.1:${address.port}/__codebuddy__/mobile/forward`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ text: 'hello' }),
       });
       expect(res.status).toBe(404);
@@ -75,6 +89,8 @@ describe('mobile Telegram forward (lot 1)', () => {
       await new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
+      if (previousSecret === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previousSecret;
     }
   });
 });
