@@ -65,6 +65,7 @@ RUN useradd -m -s /bin/bash -u 1001 codebuddy
 # Copy built application from builder stage
 COPY --from=builder --chown=codebuddy:codebuddy /app/dist ./dist
 COPY --from=builder --chown=codebuddy:codebuddy /app/node_modules ./node_modules
+COPY --from=builder --chown=codebuddy:codebuddy /app/vendor ./vendor
 COPY --from=builder --chown=codebuddy:codebuddy /app/package.json ./
 
 # Create directories for config and data
