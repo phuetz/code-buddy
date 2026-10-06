@@ -12,6 +12,7 @@
  */
 
 import { logger } from '../utils/logger.js';
+import { isDangerousCommand } from './dangerous-patterns.js';
 import {
   parsePowerShellCommand,
   type PowerShellParserOptions,
@@ -523,22 +524,10 @@ export function containsCommand(input: string, commands: string[]): boolean {
  * Check if a bash command string contains dangerous commands.
  */
 export function containsDangerousCommand(input: string): { dangerous: boolean; commands: string[] } {
-  const DANGEROUS = [
-    'rm', 'rmdir', 'mkfs', 'dd', 'fdisk', 'parted',
-    'shutdown', 'reboot', 'poweroff', 'halt',
-    'kill', 'killall', 'pkill',
-    'chmod', 'chown', 'chgrp',
-    'iptables', 'ip6tables', 'nft',
-    'useradd', 'userdel', 'usermod', 'groupadd',
-    'mount', 'umount',
-    'systemctl', 'service',
-    'crontab',
-  ];
-
   const result = parseBashCommand(input);
   const found = result.commands
     .map(c => c.command)
-    .filter(name => DANGEROUS.includes(name));
+    .filter(name => isDangerousCommand(name));
 
   return { dangerous: found.length > 0, commands: [...new Set(found)] };
 }

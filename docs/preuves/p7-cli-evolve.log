@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-evolve
+Commande: buddy evolve experiment <QA_PROPOSAL> --experiment-input <QA_INPUT> --json
+Attendu: Expérience de leçon archivée, mesurée puis annulée.
+Observé: Code 0 ; accepted=true ; score 0→1 ; rolledBack=true ; aucune rétention de la leçon.
+Verdict: prouvée
+Limite: Fiche et scénario locaux ; variante de code et fusion non exécutées.

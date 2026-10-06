@@ -1,35 +1,51 @@
 ## [Unreleased]
 
-- **research:** `buddy research ingest --source blogs` lit des flux RSS/Atom configurés en JSON, filtre les billets par mots du thème et utilise leur URL canonique pour la déduplication CKG. `--feeds-file` sélectionne la liste ; les erreurs de flux échouent ouvertement.
-- **research:** `buddy research ingest --source github|models|all` ajoute les dépôts GitHub populaires et les modèles de génération Hugging Face au CKG, avec filtres, tri, identifiants stables et ingestion idempotente. `both` conserve arXiv et Europe PMC.
+### Corrigé
 
-## [2.3.0] (unreleased)
+- Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
+- Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
 
-### Added
+## [2.3.0] (2026-10-01)
 
-- **agent:** `[tool_loop_guardrails]` in `config.toml` sets `warn_after` and `hard_stop_after` for `exact_failure`, `same_tool_failure`, and `idempotent_no_progress` on the existing tool-loop guard. Unset keys keep the historical 5-then-3 behaviour; the two failure counters stay off until set.
-- **security:** `buddy security audit [--fix] [--json]` reports stable `checkId`s for the skill firewall, profile modes, plaintext configuration secrets, the native sandbox, and MCP guards. Accepted suppressions live in configuration (`checkId` plus a reason). `--fix` only tightens file modes, and only after a mode backup.
-- **deploy:** `buddy deploy run` provides one-click web publishing for static and build projects targeting Cloudflare Pages (`wrangler`) and Netlify (`netlify-cli`). Simulation is active by default; `--apply` uploads with credentials strictly confined to the child environment. `buddy deploy platforms` lists upload targets versus config generators.
-- **provision:** `buddy provision db-auth` overlays versioned SQL migrations, a typed TypeScript client, and authentication views (`SignIn`, `SignUp`, `SignOut`) for local Docker Postgres (`--target local`) or hosted Supabase (`--target supabase`). Simulation by default; requires `--apply` to write files.
-- **sessions:** Unified recents index (`recents-index.json`) bridging CLI sessions, Cowork SQLite threads, and mobile conversations. Supported commands: `buddy session list` (with origin markers), `buddy session resume <id>`, `buddy session search`, and `buddy session last`. Cowork sessions can be resumed from CLI via automatic lazy bridge files.
-- **figma:** `buddy figma import` converts Figma REST API JSON exports or live Figma files into React components and CSS tokens. Supports offline execution via `--json`, token-at-call-time security, and prevents companion tool access.
-- **templates:** `expo-rn` mobile template added to the scaffolding engine and Cowork App Studio, generating an Expo SDK 52 / React Native starter with Expo Router tabs, theming, Vitest tests, and EAS configuration.
-- **cowork:** Folder instructions tab in Settings (`SettingsFolderInstructions`) displaying hierarchical context resolution (`AGENTS.md`, `CODEBUDDY.md`) between root and current directory with in-app editing and preview.
-- **skills:** Authored skill trigger derivation at write time ensures self-improvement skills are discoverable in `SkillRegistry.search`.
-- **perf:** Thin startup entrypoint (`dist/cli-boot.js`) accelerates CLI execution for `--version` (−68%) and `--help` (−29%).
+### Sécurité
 
-### Fixed
+- **security:** Les lecteurs directs intégrés refusent les fichiers d’identifiants classés, y compris les lecteurs documentaires et multimédias ; les archives sont contrôlées avant lecture et extraction. `buddy server` et le serveur sans JWT de `buddy daemon` écoutent `127.0.0.1` par défaut. Le serveur limite le débit sans faire confiance aux en-têtes de proxy non configurés et refuse les JWT mal formés ; l’environnement Bash transmis aux commandes retire `*_PAT`, `*_HEADERS` et les proxys avec mot de passe. **Limite connue : le filtre statique du shell ne couvre pas toutes les lectures récursives ni les chemins construits à l’exécution. Un secret suivi par Git peut encore être extrait par une commande shell qui lit les objets Git. La garantie « secret suivi par Git illisible » est reportée en 2.3.1.**
+- `buddy security audit` vérifie les réglages de sécurité du profil, des skills et de MCP ; son option `--fix` resserre les permissions des fichiers après sauvegarde des modes. Les audits incomplets ou portant sur des fichiers spéciaux échouent explicitement (`36fac9ed1`, `16aa191df`, `aed8b35c9`).
+- Un serveur MCP ne peut plus lancer librement un shell ni écrire hors des emplacements autorisés ; ses outils d'écriture doivent être explicitement listés (`0d9c5b2c9`, `48adb3f31`, `1d713a409`, `c7e4066ca`).
+- L'App Studio limite l'environnement transmis aux commandes et masque les clés dans la console, le chat et l'historique des versions (`a508f43d4`, `ec47c2103`, `5390cb1d2`).
 
-- **security:** `buddy security audit` takes `--profile-dir` so it no longer collides with the global `--profile` name. A missing or unreadable profile or project fails the audit instead of being reported as passed. `--fix` only removes permission bits, refuses symlinks, and writes its mode backup inside the profile (never the project). A critical finding cannot be suppressed into a passed result. Incomplete config and skill scans fail the audit. A directory or other non-regular config file fails the audit. A symlink or special file inside a skill fails the audit and is not opened. Profile and project paths in the report are passed through the same secret redaction as finding details. The tool-loop guard reads `config.toml` only when it is a regular file within 512 KiB, and refuses a fifo or other special file instead of blocking the turn. `hasWarned` is true after an `exact_failure` or `same_tool_failure` warning.
-- **skills:** File watcher resilience against kernel inotify table exhaustion (`ENOSPC` / `EMFILE` / `ENFILE`). Falls back to synchronous on-demand reads and degrades health reporting gracefully without crashing.
-- **sessions:** Strict prefix disambiguation in `materializeUnifiedSession` refuses ambiguous abbreviated IDs to prevent resuming incorrect sessions.
-- **deploy:** Filesystem sandboxing prevents `outputDir` from escaping the project root in `buddy deploy run`.
+### Premier contact et commandes
+
+- L'aide du terminal et les erreurs d'entrée donnent des indications plus utiles ; les guides d'installation et de démarrage concordent avec les commandes réellement disponibles (`959dd8e75`, `aa434d58a`).
+- Le premier démarrage avec Ollama recommande un modèle capable d'appeler des outils (`175dd0b84`).
+- `buddy fleet token` accorde les droits nécessaires pour écouter la flotte et appeler un outil distant dans son usage par défaut (`c727be659`).
+- `buddy config set`, `patch` et `unset` permettent de modifier la configuration sans ouvrir une session interactive (`80f34be1c`).
+
+### Travail quotidien
+
+- L'historique récent rassemble les sessions du terminal, de Cowork et du mobile ; les sessions de messagerie peuvent être remises à zéro avec archivage (`8268c410c`, `256f4a7ef`, `ed6532b02`).
+- L'App Studio peut corriger une génération, conserver des versions par projet, cibler un élément de l'aperçu, montrer les journaux du serveur de développement et exporter le site construit (`4275a2c7e`, `88ea45717`, `9bcbeb11a`).
+- `buddy research ingest` accepte des flux RSS/Atom, des dépôts GitHub et des modèles Hugging Face comme sources de recherche (`1cad66387`, `e53a94b15`).
+- `buddy deploy run` prépare le déploiement d'un site vers Cloudflare Pages ou Netlify en simulation par défaut ; `buddy provision db-auth` prépare une base Postgres et des vues d'authentification avec application explicite (`5efa2012b`, `b4dca6c68`).
+- `buddy figma import` convertit une maquette Figma en composants React ; un gabarit Expo est disponible dans l'atelier d'applications (`df56fa031`, `5f5f92969`).
+
+### Fiabilité et visibilité
+
+- Le navigateur reconnaît mieux certaines consignes d'action en français, vérifiées dans Chromium réel (`e01e83cc3`).
+- Le renouvellement de connexion ChatGPT indique la cause effective de l'échec ; la vidéo expose la réponse du service et évite un blocage de téléchargement (`feb9e2072`, `2069d6007`).
+- L'interface affiche l'état réel d'une exécution et les outils de projet signalent leurs échecs au lieu de laisser croire qu'ils ont réussi (`eb7c32aaf`, `ab11749d8`).
+- La PWA mobile cesse les reconnexions après un refus d'authentification ; la déconnexion Telegram attend la fin du traitement en cours (`74a96cd82`, `d848352fb`).
+- Le suivi des skills continue à fonctionner quand la limite des observateurs noyau est atteinte (`31f02fd9e`).
+
+### Documentation
+
+- Le catalogue décrit 91 fonctionnalités avec un état et des preuves graduées ; les documents de prise en main et l'explication française ont été précisés (`6ee17ced4`, `de496d5c3`, `aa434d58a`, `5e42b991d`).
 
 ## [2.2.0] (2026-09-17)
 
 ### Added
 
-- **mcp:** OAuth for hosted ElevenLabs over `streamable_http`: loopback PKCE sign-in, cancellation releases the local port, bounded retry of token exchange and `tools/list`, invalid tokens are dropped without losing the configured client. OAuth is refused on transports that do not support it. The ElevenLabs template stays disabled until configured.
+- **mcp** (`36d73e6`): OAuth for hosted ElevenLabs over `streamable_http`: loopback PKCE sign-in, cancellation releases the local port, bounded retry of token exchange and `tools/list`, invalid tokens are dropped without losing the configured client. OAuth is refused on transports that do not support it. The ElevenLabs template stays disabled until configured.
 - **mcp:** `buddy mcp add-json -y/--yes` adds a server without the interactive confirmation; without a TTY and without `--yes` the command exits with an explicit error instead of waiting.
 - **status:** the effective theme is shown in `/status` and exposed as `theme` in `buddy doctor --json`.
 - **fleet:** add `peer_tool_invoke` agent tool wrapping `peer.tool.invoke` so a local agent can read/search on a connected peer (`view_file`, `list_directory`, `search`). Outbound only (`fleetSafe: false`); the three remote gates (allowlist, fleetSafe, workspace root) stay on the peer. Paths are forwarded, not resolved on the caller. Unrecognized peer errors are redacted (no absolute paths or secrets). The tool is force-included only when fleet peers are connected or the query is a fleet inspection.
@@ -68,7 +84,7 @@ See [release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md) for setup and known integ
 
 ### Fixed
 
-- `buddy login` prints the complete sign-in URL and keeps waiting for a manual browser callback if automatic browser launch fails.
+- `ae883f5`: `buddy login` prints the complete sign-in URL and keeps waiting for a manual browser callback if automatic browser launch fails.
 - ChatGPT login and token refresh no longer report success when credentials cannot be saved; login explains how to resolve the storage failure.
 - Cancelled or timed-out ChatGPT logins ignore late token responses instead of replacing saved credentials after the login has ended.
 
@@ -92,7 +108,7 @@ Surveillance cadencée par les battements du système nerveux, durcissement déf
   *Fichiers clés* : `src/sensory/system-vitals-emitter.ts`, `src/sensory/heartbeat-fallback.ts`, `src/sensory/sensory-status.ts`, `src/commands/cli/sensory-command.ts`, `src/sensory/sensory-rules-engine.ts`, `src/server/index.ts`.
   *Preuves* : Suite `tests/sensory` + `tests/cli` à 98 fichiers / 867 tests verts (`f31004d6f`, `62ef2559d`, `1de88f026`). Vérification agy v2 (`docs/reports/2026-09/VERIF-SURV2-AGY.md`) : 38 tests de lecture de queue dans `tests/sensory/rule-runs-tail.test.ts`, validation quota cgroup v2 et bornage [0, 100] (`14296b1c7`, fusion `c89051551`).
 
-- **Sécurité (4 failles B fermées, déobfuscation, chemins d'identifiants, formats de clés)** :
+- **Sécurité (`3c50434`, 4 failles B fermées, déobfuscation, chemins d'identifiants, formats de clés)** :
   L'audit défensif de la flotte et du bac à sable ferme 4 failles B : contournement du pare-feu de skills par obfuscation (homoglyphes, césures, zero-width) étendu à toutes les classes de motifs (destructif, exfiltration, réseau, identifiants) par la couche sûre de `src/security/text-deobfuscation.ts` (`deobfuscateSafeForScan`), le décodage agressif Base64/URL restant réservé à l'injection de prompt pour garantir 0 faux positif sur les compétences importées ; lecture de secrets en dur par des outils authored via chemin absolu fermée par le motif `sensitive-credential-path` dans `dangerous-patterns.ts` (`52efd0109`) ; omission des clés OpenAI (`sk-`, `sk-proj-`), Anthropic (`sk-ant-`) et xAI (`xai-`) dans le scanner `scan_secrets` fermée par leur intégration dans `SECRET_PATTERNS` avec ancrage anti faux positifs (`105c10797`). Les surfaces 1 (`peer.tool.invoke` avec vérification de chemin et approbation fail-closed) et 3 (SSRF avec IP obfusquées décimales/hex/octales, métadonnées cloud, pinning DNS et rejet JWT absent en production) sont prouvées solides par des tests de refus (`899149fab`, `545a42621`). La chasse adversariale étendue ferme la déobfuscation pour les homoglyphes grecs (α, ϲ), latin étendu (ă), contrôles bidi `\p{Cf}`, encodage URL `%XX` et Base64 (blobs ≥ 16 car. ASCII) dans `deobfuscateForScan` (`a14d8012b`) ; étend `sensitive-credential-path` à 9 chemins d'identifiants (`~/.config/gh/hosts.yml`, Google gcloud ADC, `~/.azure`, `.terraformrc`, `~/.npmrc`, `~/.cargo/credentials[.toml]`, `~/.pypirc`, `~/.git-credentials`, `baa21afbc`) ; et élargit `SECRET_PATTERNS` aux clés Hugging Face (`hf_`), DigitalOcean (`dop_v1_`), SendGrid (`SG.`), Twilio (`SK`/`AC`), npm (`npm_`), PyPI (`pypi-`), Vercel (`vcp_`/`vci_`...), Supabase (`sb_secret_`/`sb_publishable_`), Azure (`AccountKey=`), Cloudflare (`CF_API_TOKEN=`) et `mongodb+srv://` (`e1cfda32c`).
   *Variables d'environnement* : Aucune (moteur défensif permanent).
   *Opt-in / défaut* : Actif par défaut sans régression ni faux positif (0 hit sur 2 414 fichiers TS de `src/` et 421 fichiers Markdown de `docs/`).

@@ -99,4 +99,12 @@ describe('Couleurs Tailwind Cowork', () => {
     expect(css).toContain('.text-white:hover:not(:disabled)');
     expect(css).toContain('color: var(--color-on-accent);');
   });
+
+  it('réserve le jeton atténué aux décorations dans les libellés SVG', () => {
+    for (const file of ['WorkflowEditor.tsx', 'settings/SettingsCostDashboard.tsx']) {
+      const source = readFileSync(new URL(`../src/renderer/components/${file}`, import.meta.url), 'utf8');
+      expect(source, file).not.toMatch(/<text\b[^>]*fill="var\(--color-text-muted\)"/);
+      expect(source, file).toMatch(/<text\b[^>]*fill="var\(--color-text-secondary\)"/);
+    }
+  });
 });

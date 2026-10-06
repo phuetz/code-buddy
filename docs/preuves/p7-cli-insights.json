@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-insights",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "2510e5bed1a10d8c60240cc7efd90dd4c874a71d800f56fdf0e9c33df5fc0abf",
+  "artifact": "docs/preuves/p7-cli-insights.log",
+  "summary": "Code 0 ; « Code Buddy Insights » ; « Session : $0.0000 » ; 0 exécution d’outil."
+}

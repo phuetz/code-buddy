@@ -6,6 +6,7 @@ import path from 'path';
 import { getImageGenerationModel } from '../config/agent-defaults.js';
 import { resolveToolGatewayRoute } from '../agent/tool-gateway-router.js';
 import { logger } from '../utils/logger.js';
+import { checkSecretFileAccess, formatSecretRefusal } from '../security/secret-files.js';
 import {
   getChatGptAuth,
   hasCodexCredentials,
@@ -1293,6 +1294,8 @@ async function loadComfyInpaintTemplate(runtime: MediaGenerationRuntime): Promis
     const requested = configuredPath!;
     if (requested.includes('\0')) throw new Error('ComfyUI inpaint workflow path is invalid');
     const workflowPath = path.resolve(runtime.rootDir ?? process.cwd(), requested);
+    const verdict = checkSecretFileAccess(workflowPath, 'read');
+    if (verdict.secret) throw new Error(formatSecretRefusal(workflowPath, verdict));
     const metadata = await fs.lstat(workflowPath);
     if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size > MAX_COMFY_WORKFLOW_BYTES) {
       throw new Error('ComfyUI inpaint workflow must be a regular JSON file smaller than 1 MB');
@@ -2352,7 +2355,10 @@ async function uploadComfyH3Reference(
     if (!response.ok) throw new Error(`Reference image fetch returned ${response.status} for ${trimmed}`);
     bytes = Buffer.from(await response.arrayBuffer());
   } else {
-    bytes = await fs.readFile(path.resolve(trimmed));
+    const localPath = path.resolve(trimmed);
+    const verdict = checkSecretFileAccess(localPath, 'read');
+    if (verdict.secret) throw new Error(formatSecretRefusal(localPath, verdict));
+    bytes = await fs.readFile(localPath);
     filename = `codebuddy-h3-ref-${index}${path.extname(trimmed) || '.png'}`;
   }
   if (bytes.length === 0 || bytes.length > MAX_EDIT_REFERENCE_BYTES) {

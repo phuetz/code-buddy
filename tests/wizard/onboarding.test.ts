@@ -68,7 +68,7 @@ describe('onboarding', () => {
       expect(PROVIDER_DEFAULT_MODEL['claude']).toBe('claude-sonnet-4-20250514');
       expect(PROVIDER_DEFAULT_MODEL['chatgpt']).toBe('gpt-6-sol');
       expect(PROVIDER_DEFAULT_MODEL['gemini']).toBe('gemini-2.0-flash');
-      expect(PROVIDER_DEFAULT_MODEL['ollama']).toBe('qwen2.5-coder:7b');
+      expect(PROVIDER_DEFAULT_MODEL['ollama']).toBe('qwen3:8b');
     });
   });
 
@@ -113,7 +113,7 @@ describe('onboarding', () => {
         model: 'llama3',
       });
 
-      expect(roadmap).toContain('Hermes-style onboarding phases');
+      expect(roadmap).toContain('Setup steps');
       expect(roadmap).toContain('Install and diagnose');
       expect(roadmap).toContain('ollama serve');
       expect(roadmap).toContain('buddy --continue');

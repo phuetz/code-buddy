@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "http-a2a",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "4b18006baa2b187c77b06e7b9570ce52287ad02a8fa18d7211d507c6a1f9d916",
+  "artifact": "docs/preuves/p5-http-a2a-2026-09-29.log",
+  "summary": "Tâche A2A exécutée de bout en bout par Ollama local."
+}

@@ -376,7 +376,7 @@ describe('createTurboQuantProvider', () => {
 
   it('returns a provider when OLLAMA_HOST is set', () => {
     delete process.env['TURBOQUANT_VLLM_ENDPOINT'];
-    process.env['OLLAMA_HOST'] = 'http://localhost:11434';
+    process.env['OLLAMA_HOST'] = 'http://127.0.0.1:11434';
     const provider = createTurboQuantProvider();
     expect(provider).toBeInstanceOf(TurboQuantProvider);
   });

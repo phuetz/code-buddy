@@ -13,6 +13,7 @@ import type { CompanionAwayAngle } from './personas/types.js';
 import { pickUnsaidLine } from './recent-said.js';
 import { resolveHouseholdClock } from './household-time.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 export type { CompanionAwayAngle };
 
@@ -151,7 +152,7 @@ export function pickAwayAngle(
 function defaultAwayStatePath(): string {
   return (
     process.env.CODEBUDDY_COMPANION_AWAY_STATE_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'away-state.json')
+    getCodeBuddyPath('companion', 'away-state.json')
   );
 }
 

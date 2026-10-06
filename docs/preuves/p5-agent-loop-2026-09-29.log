@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy --model qwen3:4b-instruct --compact --enabled-tools read_file --prompt <lecture package.json>
+Attendu: Le tour modèle→outil→modèle s’achève sur la valeur du fichier.
+Observé: assistant tool_call read_file({"path":"package.json"}); tool_result contient version 7.3.1; assistant final contient 7.3.1; run terminé, code 0.
+Verdict: prouvée

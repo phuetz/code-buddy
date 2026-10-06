@@ -1,3 +1,5 @@
+import { DANGEROUS_COMMANDS } from '../security/dangerous-command-data.js';
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 /**
  * Centralized configuration constants for Code Buddy
  */
@@ -39,19 +41,7 @@ export const BASH_CONFIG = {
   /** Maximum output size to capture (bytes) */
   MAX_OUTPUT_SIZE: 1024 * 1024, // 1MB
   /** Dangerous commands that require confirmation */
-  DANGEROUS_COMMANDS: [
-    'rm',
-    'rmdir',
-    'del',
-    'format',
-    'mkfs',
-    'dd',
-    'shutdown',
-    'reboot',
-    'halt',
-    'poweroff',
-    'init',
-  ],
+  DANGEROUS_COMMANDS: [...DANGEROUS_COMMANDS],
   /** Blocked commands that are never allowed */
   BLOCKED_COMMANDS: [
     'fork',
@@ -82,7 +72,7 @@ export const API_CONFIG = {
   /** LM Studio default base URL */
   LMSTUDIO_BASE_URL: 'http://localhost:1234/v1',
   /** Ollama default base URL */
-  OLLAMA_BASE_URL: 'http://localhost:11434/v1',
+  OLLAMA_BASE_URL: getOllamaV1BaseUrl(),
 } as const;
 
 export const PATHS = {
@@ -196,8 +186,12 @@ export const TOKEN_LIMITS = {
 export const SERVER_CONFIG = {
   /** Default port for the API server */
   DEFAULT_PORT: 3000,
-  /** Default host to bind the server to */
-  DEFAULT_HOST: '0.0.0.0',
+  /**
+   * Default host to bind the server to. Loopback since 2.3.0: exposing the
+   * server to the network is an explicit choice (`--host 0.0.0.0` or
+   * `HOST=0.0.0.0`), and then `JWT_SECRET` must be set.
+   */
+  DEFAULT_HOST: '127.0.0.1',
   /** Default maximum request body size */
   DEFAULT_MAX_REQUEST_SIZE: '10mb',
   /** Default maximum WebSocket connections */

@@ -141,6 +141,23 @@ describe('PeerToolBridge', () => {
     ]);
   });
 
+  it('list_directory masque les noms des fichiers classés secrets', async () => {
+    await fs.writeFile(path.join(tempWorkspace, 'secrets.json'), '{"token":"FAKE"}');
+    await fs.writeFile(path.join(tempWorkspace, 'prod.env'), 'KEY=FAKE');
+    await fs.writeFile(path.join(tempWorkspace, 'settings.json'), '{}');
+    const frame = {
+      id: 'req-list-private',
+      method: 'peer.tool.invoke',
+      params: { tool: 'list_directory', args: { path: '.' } },
+    };
+    const response = await dispatchPeerRequest(frame, defaultCtx);
+    expect(response.ok).toBe(true);
+    const output = (response.payload as InvokePayload).output;
+    expect(output).not.toContain('secrets.json');
+    expect(output).not.toContain('prod.env');
+    expect(output).toContain('settings.json');
+  });
+
   describe('scope validation', () => {
     it('allows invocation if scopes is undefined (defaults to *)', async () => {
       await fs.writeFile(path.join(tempWorkspace, 'test.txt'), 'hello');

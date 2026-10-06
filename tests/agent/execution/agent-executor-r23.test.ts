@@ -178,7 +178,7 @@ describe('R23 AgentExecutor — faux succès', () => {
       const entries = await executor.processUserMessage('Hello', history, messages);
 
       const joined = entries.map((entry) => entry.content).join('\n');
-      expect(joined).toMatch(/réponse vide du fournisseur/i);
+      expect(joined).toMatch(/Empty provider response/i);
       expect(joined).not.toContain('Using tools to help you');
       expect(entries.some((entry) => entry.type === 'assistant' && entry.content === '')).toBe(false);
       expect(messages.some((msg) => msg.role === 'assistant' && !msg.content && !msg.tool_calls)).toBe(false);
@@ -194,7 +194,7 @@ describe('R23 AgentExecutor — faux succès', () => {
       );
 
       const text = visibleText(chunks);
-      expect(text).toMatch(/réponse vide du fournisseur/i);
+      expect(text).toMatch(/Empty provider response/i);
       expect(text).not.toContain('Using tools to help you');
       expect(chunks.some((chunk) => chunk.type === 'done')).toBe(true);
       expect(history.some((entry) => entry.content === 'Using tools to help you...')).toBe(false);
@@ -210,7 +210,7 @@ describe('R23 AgentExecutor — faux succès', () => {
 
       expect(deps.client.chatStream).toHaveBeenCalledTimes(2);
       expect(entries.map((entry) => entry.content).join('\n')).toContain('Réponse après retry');
-      expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/réponse vide du fournisseur/i);
+      expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/Empty provider response/i);
     });
   });
 
@@ -292,7 +292,7 @@ describe('R23 AgentExecutor — faux succès', () => {
       const entries = await executor.processUserMessage('Hello', history, []);
 
       expect(deps.client.chatStream).toHaveBeenCalledTimes(1);
-      expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/réponse vide du fournisseur/i);
+      expect(entries.map((entry) => entry.content).join('\n')).not.toMatch(/Empty provider response/i);
       expect(history.some((entry) => entry.truncated === true)).toBe(true);
       expect(entries.map((entry) => entry.content).join('\n')).toMatch(/tronquée/i);
     });

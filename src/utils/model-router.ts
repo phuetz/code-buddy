@@ -1,6 +1,8 @@
 import * as path from "path";
 import { EventEmitter } from "events";
 import { readJsonAtomicSync, writeJsonAtomicSync } from './atomic-write.js';
+import { getModelPricing } from '../config/model-pricing.js';
+import { ROUTER_MODEL_DATA, ROUTER_DEFAULT_DATA } from '../config/model-price-data.js';
 
 export type TaskType =
   | "search"      // Fast searches
@@ -41,63 +43,17 @@ export interface ModelHealth {
   cooldownUntil: Date | null;
 }
 
-// Available Grok models
-const GROK_MODELS: Record<string, ModelConfig> = {
-  "grok-3-latest": {
-    id: "grok-3-latest",
-    name: "Grok 3",
-    costPer1kInput: 0.005,
-    costPer1kOutput: 0.015,
-    contextWindow: 131072,
-    speed: "medium",
-    capabilities: ["planning", "review", "complex", "docs", "chat"],
-  },
-  "grok-3-fast": {
-    id: "grok-3-fast",
-    name: "Grok 3 Fast",
-    costPer1kInput: 0.003,
-    costPer1kOutput: 0.009,
-    contextWindow: 131072,
-    speed: "fast",
-    capabilities: ["coding", "search", "debug", "chat"],
-  },
-  "grok-code-fast-1": {
-    id: "grok-code-fast-1",
-    name: "Grok Code Fast",
-    costPer1kInput: 0.002,
-    costPer1kOutput: 0.006,
-    contextWindow: 65536,
-    speed: "fast",
-    capabilities: ["coding", "search", "debug"],
-  },
-  "grok-2-latest": {
-    id: "grok-2-latest",
-    name: "Grok 2",
-    costPer1kInput: 0.002,
-    costPer1kOutput: 0.010,
-    contextWindow: 131072,
-    speed: "medium",
-    capabilities: ["coding", "chat", "docs"],
-  },
-};
+// The router owns selection logic; model identities and attributes are data.
+const GROK_MODELS: Record<string, ModelConfig> = Object.fromEntries(
+  Object.entries(ROUTER_MODEL_DATA).map(([id, data]) => {
+    return [id, { ...data, id,
+      get costPer1kInput() { return getModelPricing(id).inputPerMillion / 1000; },
+      get costPer1kOutput() { return getModelPricing(id).outputPerMillion / 1000; },
+    }];
+  }),
+);
 
-const DEFAULT_ROUTER_CONFIG: ModelRouterConfig = {
-  defaultModel: "grok-code-fast-1",
-  taskModels: {
-    search: "grok-code-fast-1",
-    planning: "grok-3-latest",
-    coding: "grok-code-fast-1",
-    review: "grok-3-latest",
-    debug: "grok-code-fast-1",
-    docs: "grok-3-latest",
-    chat: "grok-3-fast",
-    complex: "grok-3-latest",
-  },
-  autoSwitch: true,
-  preferSpeed: false,
-  fallbackChain: ["grok-3-fast", "grok-2-latest", "grok-code-fast-1"],
-  enableFallback: true,
-};
+const DEFAULT_ROUTER_CONFIG: ModelRouterConfig = ROUTER_DEFAULT_DATA;
 
 /** Cooldown period after consecutive failures (in ms) */
 const FAILURE_COOLDOWN_MS = 60000; // 1 minute
@@ -299,8 +255,10 @@ export class ModelRouter extends EventEmitter {
   private getCheapestModel(): string {
     const sorted = Object.entries(GROK_MODELS)
       .sort((a, b) => {
-        const costA = a[1].costPer1kInput + a[1].costPer1kOutput;
-        const costB = b[1].costPer1kInput + b[1].costPer1kOutput;
+        const priceA = getModelPricing(a[0]);
+        const priceB = getModelPricing(b[0]);
+        const costA = priceA.inputPerMillion + priceA.outputPerMillion;
+        const costB = priceB.inputPerMillion + priceB.outputPerMillion;
         return costA - costB;
       });
 
@@ -332,9 +290,10 @@ export class ModelRouter extends EventEmitter {
     const modelConfig = GROK_MODELS[this.currentModel];
     if (!modelConfig) return 0;
 
+    const price = getModelPricing(this.currentModel);
     const cost =
-      (inputTokens / 1000) * modelConfig.costPer1kInput +
-      (outputTokens / 1000) * modelConfig.costPer1kOutput;
+      (inputTokens / 1_000_000) * price.inputPerMillion +
+      (outputTokens / 1_000_000) * price.outputPerMillion;
 
     this.sessionCost += cost;
     this.emit("usage:recorded", { inputTokens, outputTokens, cost, totalCost: this.sessionCost });
@@ -506,7 +465,12 @@ export class ModelRouter extends EventEmitter {
    * Get model info
    */
   getModelInfo(modelId?: string): ModelConfig | null {
-    return GROK_MODELS[modelId || this.currentModel] || null;
+    const id = modelId || this.currentModel;
+    const config = GROK_MODELS[id];
+    if (!config) return null;
+    const price = getModelPricing(id);
+    return { ...config, costPer1kInput: price.inputPerMillion / 1000,
+      costPer1kOutput: price.outputPerMillion / 1000 };
   }
 
   /**
@@ -520,7 +484,7 @@ export class ModelRouter extends EventEmitter {
    * Format router status
    */
   formatStatus(): string {
-    const currentConfig = GROK_MODELS[this.currentModel];
+    const currentConfig = this.getModelInfo();
 
     let output = `\n🤖 Model Router Status\n${"═".repeat(50)}\n\n`;
     output += `Current Model: ${this.currentModel}\n`;
@@ -563,9 +527,10 @@ export class ModelRouter extends EventEmitter {
 
     for (const [id, config] of Object.entries(GROK_MODELS)) {
       const current = id === this.currentModel ? " 🟢" : "";
+      const price = getModelPricing(id);
       output += `  ${id}${current}\n`;
       output += `    ${config.name} | ${config.speed} | ${config.contextWindow.toLocaleString()} ctx\n`;
-      output += `    Cost: $${config.costPer1kInput}/1k in, $${config.costPer1kOutput}/1k out\n`;
+      output += `    Cost: $${price.inputPerMillion / 1000}/1k in, $${price.outputPerMillion / 1000}/1k out\n`;
       output += `    Good for: ${config.capabilities.join(", ")}\n`;
       output += `\n`;
     }

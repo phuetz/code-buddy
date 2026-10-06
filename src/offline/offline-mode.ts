@@ -12,6 +12,7 @@
  * Allows Code Buddy to function without internet connectivity.
  */
 
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 import { EventEmitter } from 'events';
 import fs from 'fs-extra';
 import * as path from 'path';
@@ -697,7 +698,7 @@ export class OfflineMode extends EventEmitter {
     maxTokens?: number;
     temperature?: number;
   }): Promise<string> {
-    const endpoint = this.config.localLLMEndpoint || 'http://localhost:11434';
+    const endpoint = this.config.localLLMEndpoint || getOllamaBaseUrl();
 
     const response = await axios.post(`${endpoint}/api/generate`, {
       model,
@@ -745,7 +746,7 @@ export class OfflineMode extends EventEmitter {
     try {
       switch (this.config.localLLMProvider) {
         case 'ollama': {
-          const endpoint = this.config.localLLMEndpoint || 'http://localhost:11434';
+          const endpoint = this.config.localLLMEndpoint || getOllamaBaseUrl();
           await axios.get(`${endpoint}/api/tags`, { timeout: 2000 });
           return true;
         }
@@ -794,7 +795,7 @@ export class OfflineMode extends EventEmitter {
 
     // Check Ollama
     try {
-      const endpoint = this.config.localLLMEndpoint || 'http://localhost:11434';
+      const endpoint = this.config.localLLMEndpoint || getOllamaBaseUrl();
       await axios.get(`${endpoint}/api/tags`, { timeout: 2000 });
       available.push('ollama');
     } catch {
@@ -841,7 +842,7 @@ export class OfflineMode extends EventEmitter {
   async getLocalModels(): Promise<string[]> {
     try {
       if (this.config.localLLMProvider === 'ollama') {
-        const endpoint = this.config.localLLMEndpoint || 'http://localhost:11434';
+        const endpoint = this.config.localLLMEndpoint || getOllamaBaseUrl();
         const response = await axios.get(`${endpoint}/api/tags`, { timeout: 5000 });
         return response.data.models?.map((m: { name: string }) => m.name) || [];
       }

@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-config
+Commande: buddy config show
+Attendu: Configuration effective affichée.
+Observé: Code 0 ; en-tête « Code Buddy Environment Configuration » ; GROK_MODEL=qwen3:4b-instruct.
+Verdict: prouvée
+Limite: Une exécution locale unique ; autres environnements non vérifiés.

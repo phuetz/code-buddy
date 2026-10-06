@@ -66,6 +66,17 @@ export class TextEditorTool implements Disposable {
    * // View specific line range
    * await editor.view('src/index.ts', [10, 25]);
    */
+  /**
+   * An in-place edit both READS (matching, error context) and WRITES the file:
+   * it must pass the read rules (credential files are never read) AND the write
+   * rules (the system whitelist is read-only outside tmp).
+   */
+  private resolveForEdit(filePath: string): { valid: boolean; resolved: string; error?: string } {
+    const read = this.vfs.resolvePath(filePath, this.baseDirectory, 'read');
+    if (!read.valid) return read;
+    return this.vfs.resolvePath(filePath, this.baseDirectory, 'write');
+  }
+
   async view(
     filePath: string,
     viewRange?: [number, number]
@@ -175,7 +186,7 @@ export class TextEditorTool implements Disposable {
     replaceAll: boolean = false
   ): Promise<ToolResult> {
     try {
-      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
+      const pathValidation = this.resolveForEdit(filePath);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
@@ -329,7 +340,7 @@ export class TextEditorTool implements Disposable {
    */
   async create(filePath: string, content: string): Promise<ToolResult> {
     try {
-      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
+      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory, 'write');
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
@@ -457,7 +468,7 @@ export class TextEditorTool implements Disposable {
     newContent: string
   ): Promise<ToolResult> {
     try {
-      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
+      const pathValidation = this.resolveForEdit(filePath);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }
@@ -574,7 +585,7 @@ export class TextEditorTool implements Disposable {
     content: string
   ): Promise<ToolResult> {
     try {
-      const pathValidation = this.vfs.resolvePath(filePath, this.baseDirectory);
+      const pathValidation = this.resolveForEdit(filePath);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
       }

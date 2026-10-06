@@ -22,6 +22,12 @@ import * as os from 'os';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
+import {
+  checkSecretFileAccess,
+  formatSecretRefusal,
+  type SecretFileAccess,
+} from '../security/secret-files.js';
+import { isPathInside } from '../security/path-comparison.js';
 
 // ============================================================================
 // Types
@@ -48,7 +54,13 @@ export interface PathValidationResult {
   /** Error message if invalid */
   error?: string;
   /** Reason for blocking */
-  reason?: 'outside_workspace' | 'path_traversal' | 'symlink_escape' | 'blocked_path';
+  reason?:
+    | 'outside_workspace'
+    | 'path_traversal'
+    | 'symlink_escape'
+    | 'blocked_path'
+    | 'secret_file'
+    | 'read_only_path';
 }
 
 export interface BlockedAccessLog {
@@ -65,8 +77,15 @@ export interface BlockedAccessLog {
 
 /**
  * System directories that tools may need to access for proper functioning.
- * These are read-only access paths that don't contain user secrets.
+ *
+ * Only the temporary directories are writable. Every other entry is READ-ONLY
+ * for agent tools (a write under `~/.codebuddy` or a toolchain cache is refused
+ * with `read_only_path`). Credential files below them (`codex-auth.json`,
+ * `*.env`, `*auth*.json`, keys…) are refused for read too — see
+ * `src/security/secret-files.ts`, which is checked BEFORE this list.
  */
+const WRITABLE_SYSTEM_WHITELIST: readonly string[] = [os.tmpdir(), '/tmp', '/var/tmp'];
+
 const SYSTEM_WHITELIST: readonly string[] = [
   // Node.js and package management
   '/usr/lib/node_modules',
@@ -159,6 +178,8 @@ export class WorkspaceIsolation extends EventEmitter {
   private canonicalWorkspaceRoot: string | null = null;
   private blockedAccessLog: BlockedAccessLog[] = [];
   private systemWhitelist: Set<string>;
+  /** Whitelist entries that also accept writes (tmp dirs + operator-added paths). */
+  private writableWhitelist: Set<string>;
   private blockedPaths: Set<string>;
   /** Extra workspace roots attached to one async actor/turn only. */
   private readonly workspaceContext = new AsyncLocalStorage<readonly string[]>();
@@ -182,6 +203,9 @@ export class WorkspaceIsolation extends EventEmitter {
     // Build whitelist set for fast lookup (both forms of every entry)
     this.systemWhitelist = new Set(
       [...SYSTEM_WHITELIST, ...this.config.additionalAllowedPaths].flatMap(rootForms)
+    );
+    this.writableWhitelist = new Set(
+      [...WRITABLE_SYSTEM_WHITELIST, ...this.config.additionalAllowedPaths].flatMap(rootForms)
     );
 
     // Build blocked paths set — both forms too, otherwise a secret reached
@@ -231,6 +255,7 @@ export class WorkspaceIsolation extends EventEmitter {
     this.config.additionalAllowedPaths.push(resolved);
     for (const form of rootForms(resolved)) {
       this.systemWhitelist.add(form);
+      this.writableWhitelist.add(form);
     }
   }
 
@@ -272,37 +297,26 @@ export class WorkspaceIsolation extends EventEmitter {
    * Check if a path is in the blocked list
    */
   private isBlockedPath(resolvedPath: string): boolean {
-    // Check exact matches
-    if (this.blockedPaths.has(resolvedPath)) {
-      return true;
-    }
-
-    // Check if path is under a blocked directory
-    const blockedPathsArray = Array.from(this.blockedPaths);
-    for (let i = 0; i < blockedPathsArray.length; i++) {
-      if (resolvedPath.startsWith(blockedPathsArray[i] + path.sep)) {
-        return true;
-      }
-    }
-
-    return false;
+    return Array.from(this.blockedPaths).some((blocked) => isPathInside(resolvedPath, blocked));
   }
 
   /**
    * Check if a path is in the system whitelist
    */
-  private isWhitelisted(resolvedPath: string): boolean {
+  private isWhitelisted(resolvedPath: string, access: SecretFileAccess = 'read'): boolean {
     if (this.config.strictMode) {
       return false;
     }
 
+    const list = access === 'write' ? this.writableWhitelist : this.systemWhitelist;
+
     // Check exact matches
-    if (this.systemWhitelist.has(resolvedPath)) {
+    if (list.has(resolvedPath)) {
       return true;
     }
 
     // Check if path is under a whitelisted directory
-    const whitelistArray = Array.from(this.systemWhitelist);
+    const whitelistArray = Array.from(list);
     for (let i = 0; i < whitelistArray.length; i++) {
       if (resolvedPath.startsWith(whitelistArray[i] + path.sep)) {
         return true;
@@ -385,15 +399,11 @@ export class WorkspaceIsolation extends EventEmitter {
    * @param operation - Description of the operation (for logging)
    * @returns Validation result with resolved path or error
    */
-  validatePath(filePath: string, operation: string = 'file access'): PathValidationResult {
-    // If isolation is disabled, allow everything
-    if (!this.config.enabled) {
-      return {
-        valid: true,
-        resolved: path.resolve(filePath),
-      };
-    }
-
+  validatePath(
+    filePath: string,
+    operation: string = 'file access',
+    access: SecretFileAccess = 'read'
+  ): PathValidationResult {
     // Handle empty or invalid paths
     if (!filePath || typeof filePath !== 'string') {
       return {
@@ -408,7 +418,7 @@ export class WorkspaceIsolation extends EventEmitter {
     const resolved = path.resolve(filePath);
 
     // Check if path is explicitly blocked (secrets, credentials)
-    if (this.isBlockedPath(resolved)) {
+    if (this.config.enabled && this.isBlockedPath(resolved)) {
       this.logBlockedAccess(filePath, resolved, 'blocked_path', operation);
       return {
         valid: false,
@@ -418,11 +428,44 @@ export class WorkspaceIsolation extends EventEmitter {
       };
     }
 
+    // Credential files: this deny list wins over the workspace, the system
+    // whitelist AND `--allow-outside` (disabled isolation). Checked on the
+    // lexical path and on its symlink-resolved form.
+    const secret = checkSecretFileAccess(resolved, access);
+    if (secret.secret) {
+      this.logBlockedAccess(filePath, secret.matchedPath ?? resolved, 'secret_file', operation);
+      return {
+        valid: false,
+        resolved,
+        error: formatSecretRefusal(filePath, secret),
+        reason: 'secret_file',
+      };
+    }
+
+    // If isolation is disabled, allow everything else
+    if (!this.config.enabled) {
+      return {
+        valid: true,
+        resolved,
+      };
+    }
+
     // Check if path is within workspace
     const isInWorkspace = this.isWithinWorkspace(resolved);
 
     // Check if path is in system whitelist
     const isWhitelisted = this.isWhitelisted(resolved);
+
+    // The system whitelist is read-only outside the tmp directories.
+    if (!isInWorkspace && isWhitelisted && access === 'write' && !this.isWhitelisted(resolved, 'write')) {
+      this.logBlockedAccess(filePath, resolved, 'read_only_path', operation);
+      return {
+        valid: false,
+        resolved,
+        error: `Path is read-only for agent tools: ${filePath} (outside the workspace, whitelisted for reading only)`,
+        reason: 'read_only_path',
+      };
+    }
 
     // Allow if in workspace or whitelisted
     if (!isInWorkspace && !isWhitelisted) {
@@ -450,7 +493,7 @@ export class WorkspaceIsolation extends EventEmitter {
       }
 
       const realIsInWorkspace = this.isWithinWorkspace(realPath);
-      const realIsWhitelisted = this.isWhitelisted(realPath);
+      const realIsWhitelisted = this.isWhitelisted(realPath, access);
 
       if (!realIsInWorkspace && !realIsWhitelisted) {
         this.logBlockedAccess(filePath, realPath, 'symlink_escape', operation);
@@ -474,7 +517,8 @@ export class WorkspaceIsolation extends EventEmitter {
    */
   validatePaths(
     filePaths: string[],
-    operation: string = 'file access'
+    operation: string = 'file access',
+    access: SecretFileAccess = 'read'
   ): {
     valid: boolean;
     results: Map<string, PathValidationResult>;
@@ -484,7 +528,7 @@ export class WorkspaceIsolation extends EventEmitter {
     const errors: string[] = [];
 
     for (const filePath of filePaths) {
-      const result = this.validatePath(filePath, operation);
+      const result = this.validatePath(filePath, operation, access);
       results.set(filePath, result);
       if (!result.valid && result.error) {
         errors.push(result.error);
@@ -508,8 +552,12 @@ export class WorkspaceIsolation extends EventEmitter {
   /**
    * Validate and resolve a path, throwing if invalid
    */
-  resolveOrThrow(filePath: string, operation: string = 'file access'): string {
-    const result = this.validatePath(filePath, operation);
+  resolveOrThrow(
+    filePath: string,
+    operation: string = 'file access',
+    access: SecretFileAccess = 'read'
+  ): string {
+    const result = this.validatePath(filePath, operation, access);
     if (!result.valid) {
       throw new Error(result.error || 'Path validation failed');
     }
@@ -618,9 +666,10 @@ export function initializeWorkspaceIsolation(options: {
  */
 export function validateWorkspacePath(
   filePath: string,
-  operation?: string
+  operation?: string,
+  access: SecretFileAccess = 'read'
 ): PathValidationResult {
-  return getWorkspaceIsolation().validatePath(filePath, operation);
+  return getWorkspaceIsolation().validatePath(filePath, operation, access);
 }
 
 /**

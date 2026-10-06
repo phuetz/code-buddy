@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const GK23_ROOT = path.join(REPO_ROOT, '_qa', 'gk23');
 export const APLAY_BIN = path.join(GK23_ROOT, 'bin', 'aplay');
-export const PIPER_BIN = '/usr/local/bin/piper';
+export const PIPER_BIN = process.env.CODEBUDDY_PIPER_BIN ?? 'piper';
 export const PIPER_MODEL = path.join(os.homedir(), 'DEV/ai-stack/voice/voices/fr_FR-siwis-medium.onnx');
 export const REAL_REMINDERS = path.join(os.homedir(), '.codebuddy/reminders.json');
 export const REAL_PENDING = path.join(os.homedir(), '.codebuddy/companion/pending-acks.json');
@@ -21,6 +21,7 @@ export const REAL_SNOOZES = path.join(os.homedir(), '.codebuddy/companion/snooze
 
 const KEYS = [
   'HOME',
+  'USERPROFILE',
   'TMPDIR',
   'PATH',
   'CODEBUDDY_REMINDERS_FILE',
@@ -106,8 +107,9 @@ export function isolateStores(workDir: string, opts: { pendingEnv?: boolean } = 
   const snoozeFile = path.join(store, 'companion', 'snoozes.json');
 
   process.env.HOME = home;
+  process.env.USERPROFILE = home;
   process.env.TMPDIR = tmp;
-  process.env.PATH = `${path.join(GK23_ROOT, 'bin')}:${process.env.PATH ?? ''}`;
+  process.env.PATH = [path.join(GK23_ROOT, 'bin'), process.env.PATH].filter(Boolean).join(path.delimiter);
   process.env.GK23_APLAY_LOG_DIR = artifacts;
   process.env.CODEBUDDY_REMINDERS_FILE = remindersFile;
   process.env.CODEBUDDY_REMINDER_LOG_FILE = logFile;

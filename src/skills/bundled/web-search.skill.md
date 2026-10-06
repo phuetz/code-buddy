@@ -17,7 +17,7 @@ nativeEngine:
     - search for
     - look up
     - find information about
-    - google
+    - recherche sur le web
     - search the web
   examples:
     - "Search for TypeScript best practices"

@@ -19,7 +19,8 @@ import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastruc
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import type { Session, SessionStore } from "../persistence/session-store.js";
 import type { CostTracker, ExtendedCostInfo } from "../utils/cost-tracker.js";
-import { MODEL_PRICING, isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
+import { isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
+import { hasModelPricing } from "../config/model-pricing.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
 import { findSkill, findStarterPack, resetSkillRegistry } from "../skills/index.js";
@@ -805,7 +806,9 @@ Look at the screenshot and find the element matching the user's intent. Output o
       if (!hasInitialOverride) {
         try {
           const profiler = getRepoProfiler();
-          const profile = await profiler.getProfile();
+          // The prompt only needs the repository summary. Starting the semantic
+          // index here loads optional native modules before the first prompt.
+          const profile = await profiler.getProfile({ backgroundIndexing: false });
           if (profile.contextPack) {
             systemPrompt = `${systemPrompt}\n\n[Repo] ${profile.contextPack}`;
             logger.debug('RepoProfiler: injected contextPack into system prompt');
@@ -1815,7 +1818,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     const pricing: 'known' | 'unknown' | 'subscription' =
       billing === 'subscription'
         ? 'subscription'
-        : MODEL_PRICING[model] ? 'known' : 'unknown';
+        : hasModelPricing(model) ? 'known' : 'unknown';
 
     return {
       total: this.sessionCost,
@@ -2136,7 +2139,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
    *
    * YOLO mode enables full autonomy with:
    * - 400 max tool rounds (vs 50 in normal mode)
-   * - No session cost limit
+   * - $100 default session cost limit, configurable up to $1,000
    * - Aggressive system prompt for autonomous operation
    *
    * @param enabled - Whether to enable YOLO mode
@@ -2145,6 +2148,15 @@ Look at the screenshot and find the element matching the user's intent. Output o
    * Applique [middleware] sans prendre les défauts du schéma pour des choix.
    * L'argument du constructeur et --max-price passent avant le fichier.
    */
+  /** Desktop override. Validated with the same hard cap as CLI limits. */
+  private sessionCostOverrideUsd?: number;
+
+  setSessionCostOverride(maxCostUsd?: number): void {
+    this.sessionCostOverrideUsd = maxCostUsd !== undefined && Number.isFinite(maxCostUsd) && maxCostUsd >= 0
+      ? maxCostUsd : undefined;
+    this.applySessionLimits(this.yoloMode);
+  }
+
   private applySessionLimits(yolo: boolean): void {
     const cliPrice = readCliFlagValue(process.argv, '--max-price');
     const cliMaxCost = cliPrice === undefined ? undefined : Number(cliPrice);
@@ -2152,7 +2164,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     const envMaxCost = envText === undefined || envText.trim() === '' ? undefined : Number(envText);
     const resolved = resolveSessionLimits({
       cliMaxToolRounds: this.callerMaxToolRounds,
-      cliMaxCost: cliMaxCost !== undefined && Number.isFinite(cliMaxCost) ? cliMaxCost : undefined,
+      cliMaxCost: this.sessionCostOverrideUsd ?? (cliMaxCost !== undefined && Number.isFinite(cliMaxCost) ? cliMaxCost : undefined),
       envMaxCost: envMaxCost !== undefined && Number.isFinite(envMaxCost) ? envMaxCost : undefined,
       toml: this.fileMiddlewareLimits,
       yolo,

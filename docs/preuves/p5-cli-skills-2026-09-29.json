@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-skills",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "ccc24bbfe01f50bbffd6db3d8f81a1b1411213095a37b3a4b544bf032c9e4936",
+  "artifact": "docs/preuves/p5-cli-skills-2026-09-29.log",
+  "summary": "Skill local bénin importé et retrouvé dans la liste."
+}

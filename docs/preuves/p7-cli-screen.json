@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-screen",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "293e542b531fb3fb1c9d91c4e958f520d572e465562bba1b8392aadb6a4c4f18",
+  "artifact": "docs/preuves/p7-cli-screen.log",
+  "summary": "Code 0 ; PNG 320x240 ; 1461 octets ; fenêtre xlogo visible (2 couleurs) ; Xvfb arrêté code 0."
+}

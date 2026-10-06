@@ -13,7 +13,7 @@ vi.mock('../../src/codebuddy/client.js', () => ({
 }));
 
 import { buildSessionRecap, filterSessions, pickSession } from '../../src/cli/session-picker.js';
-import { pickRecentSession, resumeSessionById } from '../../src/cli/session-commands.js';
+import { pickRecentSession, resolveSessionIdMatch, resumeSessionById } from '../../src/cli/session-commands.js';
 
 function fakeTty(): { input: NodeJS.ReadStream; output: NodeJS.WriteStream; written: () => string } {
   const input = new PassThrough() as unknown as NodeJS.ReadStream & { setRawMode: (v: boolean) => void };
@@ -121,5 +121,35 @@ describe('session picker (P6)', () => {
     expect(text).toContain('Last answer: Remise corrigée, tests verts.');
     expect(clientSpy.constructed).toBe(0);
     expect(buildSessionRecap({ messages: [] })).toMatchObject({ messageCount: 0, filesTouched: [] });
+  });
+
+  it('refuses an ambiguous abbreviated id instead of resuming the first loose match', async () => {
+    writeSession(dir, 'dddd4444-alpha', 'alpha', '2026-09-15T07:00:00Z', [{ type: 'user', content: 'a', timestamp: '2026-09-15T07:00:00Z' }]);
+    writeSession(dir, 'dddd4444-beta', 'beta', '2026-09-15T06:00:00Z', [{ type: 'user', content: 'b', timestamp: '2026-09-15T06:00:00Z' }]);
+    const logs: string[] = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => { logs.push(a.join(' ')); });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`exit ${code}`);
+    }) as never);
+    try {
+      await expect(resumeSessionById('dddd4444')).rejects.toThrow('exit 1');
+    } finally {
+      logSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+    const text = logs.join('\n');
+    expect(text).toContain('dddd4444-alpha');
+    expect(text).toContain('dddd4444-beta');
+    expect(text).not.toContain('Resuming session');
+  });
+
+  it('resolves a session id: exact wins, a unique prefix or substring works, several is ambiguous', () => {
+    const sessions = [{ id: 'abc-1' }, { id: 'abc-12' }, { id: 'zzz-9' }];
+    expect(resolveSessionIdMatch(sessions, 'abc-1')).toEqual({ kind: 'found', session: { id: 'abc-1' } });
+    expect(resolveSessionIdMatch(sessions, 'abc')).toMatchObject({ kind: 'ambiguous' });
+    expect(resolveSessionIdMatch(sessions, 'zz')).toEqual({ kind: 'found', session: { id: 'zzz-9' } });
+    expect(resolveSessionIdMatch(sessions, '-9')).toEqual({ kind: 'found', session: { id: 'zzz-9' } });
+    expect(resolveSessionIdMatch(sessions, 'c-1')).toMatchObject({ kind: 'ambiguous' });
+    expect(resolveSessionIdMatch(sessions, 'nope')).toEqual({ kind: 'none' });
   });
 });

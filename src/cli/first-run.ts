@@ -7,14 +7,16 @@ export const NO_PROVIDER_GUIDANCE = [
   '❌ No AI provider configured.',
   '   1. Recommended — ChatGPT OAuth (no API key, $0 marginal cost with your plan):',
   '      buddy login',
-  '   2. Local & free — start Ollama and install a coding model:',
-  '      ollama pull qwen2.5-coder:7b',
-  '      export OLLAMA_HOST=http://localhost:11434',
+  '   2. Local & free — start Ollama and pull a model that can call tools:',
+  '      ollama pull qwen3:8b',
+  '      export OLLAMA_HOST=http://127.0.0.1:11434',
+  '      export CODEBUDDY_PROVIDER=ollama',
+  '      (qwen2.5 under 14B, including qwen2.5-coder:7b, is chat-only: it cannot edit files.)',
   '   3. More providers — run the full wizard or configure an API key:',
   '      buddy onboard',
   '      GROK_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_API_KEY',
   '   After option 1 or 2, run  buddy try  for the one-minute coding demo.',
-  '   Check anytime:  buddy doctor   (add --fix to auto-configure a running Ollama).',
+  '   Check anytime:  buddy doctor   (add --fix to select a model already installed in a running Ollama).',
 ].join('\n');
 
 export function acceptsRecommendedLogin(answer: string): boolean {

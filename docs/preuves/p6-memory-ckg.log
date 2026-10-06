@@ -1,0 +1,29 @@
+Fonctionnalité : memory-ckg
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy research fact add P6Fixture uses OllamaLocal --category tool ; buddy research recall P6Fixture ; buddy research stats
+Attendu : Fait factice inscrit dans le CKG puis rappelé et compté.
+Observé : Codes 0 ; résultat [0.82] ollamalocal ; stats=1 découverte, 0 lien.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- memory-add ---
+$ buddy research fact add P6Fixture uses OllamaLocal --category tool
+Code de sortie : 0
+🆕 Nouveau fait : P6Fixture uses OllamaLocal [tool]
+
+--- memory-recall ---
+$ buddy research fact recall P6Fixture
+Code de sortie : 0
+• ollamalocal  [tool] — rétention 1.00, vu 1×
+
+--- memory-ckg ---
+$ buddy research recall P6Fixture
+Code de sortie : 0
+[0.82] ollamalocal
+
+--- memory-stats ---
+$ buddy research stats
+Code de sortie : 0
+Graphe de connaissances collectif : 1 découvertes, 0 liens.
+Ledger : <WORKTREE>/_qa/preuves-p6/home/.codebuddy/collective/ckg-ledger.jsonl

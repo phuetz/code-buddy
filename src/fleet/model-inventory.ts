@@ -16,6 +16,7 @@ import { TailscaleManager } from '../integrations/tailscale.js';
 import { getModelStrengths, getModelToolConfig } from '../config/model-tools.js';
 import { normalizeBaseURL } from '../utils/base-url.js';
 import { findRuntimeProvider } from '../providers/provider-catalog.js';
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 
 export type ModelExecutionLocation = 'local' | 'lan' | 'cloud';
 
@@ -55,7 +56,7 @@ export interface BuildModelInventoryOptions {
   forceCapabilityRefresh?: boolean;
 }
 
-const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1';
+const DEFAULT_OLLAMA_BASE_URL = getOllamaV1BaseUrl();
 const DEFAULT_LMSTUDIO_BASE_URL = 'http://localhost:1234/v1';
 
 export async function buildModelInventory(

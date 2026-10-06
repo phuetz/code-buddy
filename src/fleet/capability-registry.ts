@@ -1,3 +1,5 @@
+import { getModelPricing } from '../config/model-pricing.js';
+
 /**
  * Fleet — capability registry (Fleet P2).
  *
@@ -25,6 +27,7 @@
  * @module fleet/capability-registry
  */
 
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 import * as fs from 'node:fs';
 import * as os from 'os';
 import * as path from 'node:path';
@@ -299,8 +302,8 @@ function buildAnthropicCatalog(): FleetModelDescriptor[] {
     id,
     contextWindow: 200_000,
     strengths: deriveStrengths(id, 'anthropic'),
-    costInputUsdPerMtok: id.includes('opus') ? 15 : id.includes('sonnet') ? 3 : 0.8,
-    costOutputUsdPerMtok: id.includes('opus') ? 75 : id.includes('sonnet') ? 15 : 4,
+    costInputUsdPerMtok: getModelPricing(id).inputPerMillion,
+    costOutputUsdPerMtok: getModelPricing(id).outputPerMillion,
     provider: 'anthropic',
     egress: 'cloud',
   }));
@@ -312,8 +315,8 @@ function buildOpenAICatalog(): FleetModelDescriptor[] {
     id,
     contextWindow: id === 'gpt-5.6-sol' ? 1_050_000 : 200_000,
     strengths: deriveStrengths(id, 'openai'),
-    costInputUsdPerMtok: id.includes('mini') ? 0.4 : 5,
-    costOutputUsdPerMtok: id.includes('mini') ? 1.6 : id === 'gpt-5.6-sol' ? 30 : 20,
+    costInputUsdPerMtok: getModelPricing(id).inputPerMillion,
+    costOutputUsdPerMtok: getModelPricing(id).outputPerMillion,
     provider: 'openai',
     egress: 'cloud',
   }));
@@ -356,8 +359,8 @@ function buildGeminiCatalog(): FleetModelDescriptor[] {
     id,
     contextWindow: 1_000_000,
     strengths: deriveStrengths(id, 'gemini'),
-    costInputUsdPerMtok: id.includes('flash') ? 0.3 : 2.5,
-    costOutputUsdPerMtok: id.includes('flash') ? 1.2 : 10,
+    costInputUsdPerMtok: getModelPricing(id).inputPerMillion,
+    costOutputUsdPerMtok: getModelPricing(id).outputPerMillion,
     provider: 'gemini',
     egress: 'cloud',
   }));
@@ -492,8 +495,8 @@ function buildGrokCatalog(): FleetModelDescriptor[] {
     id,
     contextWindow: 128_000,
     strengths: deriveStrengths(id, 'grok'),
-    costInputUsdPerMtok: id.includes('fast') ? 0.5 : 2,
-    costOutputUsdPerMtok: id.includes('fast') ? 2 : 10,
+    costInputUsdPerMtok: getModelPricing(id).inputPerMillion,
+    costOutputUsdPerMtok: getModelPricing(id).outputPerMillion,
     provider: 'grok',
     egress: 'cloud',
   }));
@@ -513,8 +516,8 @@ function buildMistralCatalog(): FleetModelDescriptor[] {
     id,
     contextWindow: 128_000,
     strengths: deriveStrengths(id, 'mistral'),
-    costInputUsdPerMtok: id.includes('small') ? 0.2 : id.includes('medium') ? 1 : 4,
-    costOutputUsdPerMtok: id.includes('small') ? 0.6 : id.includes('medium') ? 3 : 12,
+    costInputUsdPerMtok: getModelPricing(id).inputPerMillion,
+    costOutputUsdPerMtok: getModelPricing(id).outputPerMillion,
     provider: 'mistral',
     egress: 'cloud',
   }));
@@ -537,7 +540,7 @@ function buildOpenRouterCatalog(): FleetModelDescriptor[] {
 // ─── Local probes ───────────────────────────────────────────────────
 
 async function probeOllama(): Promise<FleetModelDescriptor[]> {
-  const url = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+  const url = process.env.OLLAMA_BASE_URL || getOllamaBaseUrl();
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 800);

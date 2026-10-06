@@ -54,7 +54,7 @@ const READ_ONLY_TOOLS = new Set([
 // The registry's `fleetSafe: true` flag is the MAINTAINED read-only source of
 // truth (~41 tools incl. web_search/web_fetch/tool_search) — the legacy list
 // above only knew 9 file/git tools, so plan mode denied every other read-only
-// tool and the voice companion kept telling Patrice it "can't search in plan
+// tool and the voice companion kept telling the user it "can't search in plan
 // mode". Built lazily from the pure-data metadata table (a leaf module).
 let fleetSafeNames: Set<string> | null = null;
 function isFleetSafeTool(toolName: string): boolean {

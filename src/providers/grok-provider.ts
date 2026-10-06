@@ -1,3 +1,5 @@
+import { getPricingPer1M } from '../config/model-pricing.js';
+
 /**
  * Grok Provider (xAI)
  *
@@ -161,8 +163,7 @@ export class GrokProvider extends BaseProvider {
   }
 
   getPricing(): { input: number; output: number } {
-    // Grok pricing per 1M tokens
-    return { input: 3, output: 15 };
+    return getPricingPer1M(this.config?.model ?? this.defaultModel);
   }
 
   supports(feature: ProviderFeature): boolean {

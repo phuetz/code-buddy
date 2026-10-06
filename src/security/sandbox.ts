@@ -1,6 +1,7 @@
 import { spawn, SpawnOptions } from 'child_process';
 import path from 'path';
 import os from 'os';
+import { DANGEROUS_COMMAND_BLOCK_PATTERNS } from './dangerous-command-data.js';
 
 export interface SandboxConfig {
   // Filesystem restrictions
@@ -45,20 +46,6 @@ const DEFAULT_BLOCKED_PATHS = [
   '/etc/sudoers',
 ];
 
-const DANGEROUS_COMMANDS = [
-  '\\brm\\s+-[^\\s]*r[^\\s]*f[^\\s]*\\s+/(?:\\s*)$',
-  '\\brm\\s+-[^\\s]*r[^\\s]*f[^\\s]*\\s+/\\*(?:\\s*)$',
-  'dd if=',
-  'mkfs',
-  ':(){ :|:& };:',
-  'chmod -R 777 /',
-  'chown -R',
-  '> /dev/sda',
-  '\\bwget\\b.*\\|\\s*(?:ba)?sh\\b',
-  '\\bcurl\\b.*\\|\\s*(?:ba)?sh\\b',
-  'sudo rm',
-  'sudo dd',
-];
 
 /**
  * Sandbox Manager for secure command execution
@@ -105,8 +92,8 @@ export class SandboxManager {
     // Note: lowerCommand reserved for case-insensitive pattern matching if needed
 
     // Check for dangerous patterns
-    for (const pattern of DANGEROUS_COMMANDS) {
-      if (new RegExp(pattern, 'i').test(command)) {
+    for (const pattern of DANGEROUS_COMMAND_BLOCK_PATTERNS) {
+      if (pattern.test(command)) {
         return {
           valid: false,
           reason: `Potentially dangerous command pattern detected: ${pattern}`

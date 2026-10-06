@@ -4,6 +4,15 @@ description: Use the Code Explorer (gitnexus) code-graph MCP tools to understand
 version: 1.0.0
 tags: [codebase, architecture, impact, blast-radius, callers, callees, refactor, dead-code, hotspots, complexity, dependencies, cycles, who-calls, where-used, gitnexus, code-explorer, code-graph]
 tier: bundled
+nativeEngine:
+  category: development
+  priority: 85
+  triggers:
+    - analyze code structure
+    - explore codebase
+    - code blast radius
+    - circular dependencies
+    - gitnexus graph
 ---
 
 # Code Explorer — code-graph intelligence

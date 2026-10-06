@@ -32,6 +32,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import {
   loadRelationshipState,
   saveRelationshipState,
@@ -172,7 +173,7 @@ async function defaultReflect(heard: string[]): Promise<VoiceReflection | null> 
 }
 
 function defaultJournalPath(cwd?: string): string {
-  return join(cwd ?? homedir(), '.codebuddy', 'companion', 'voice-improvements.jsonl');
+  return cwd ? join(cwd, '.codebuddy', 'companion', 'voice-improvements.jsonl') : getCodeBuddyPath('companion', 'voice-improvements.jsonl');
 }
 
 interface VoiceImprovementState {
@@ -198,7 +199,7 @@ interface VoiceImprovementState {
 const MAX_REFLECTION_ATTEMPTS = 3;
 
 function defaultDedupeStatePath(cwd?: string): string {
-  return join(cwd ?? homedir(), '.codebuddy', 'companion', 'voice-improvement-state.json');
+  return cwd ? join(cwd, '.codebuddy', 'companion', 'voice-improvement-state.json') : getCodeBuddyPath('companion', 'voice-improvement-state.json');
 }
 
 function conversationFingerprint(heard: string[]): string {

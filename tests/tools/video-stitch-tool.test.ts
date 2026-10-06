@@ -46,9 +46,11 @@ function makeFakeSpawn(seen: string[][]): typeof spawn {
         // the fake ffmpeg must leave a non-empty file at its destination, like the real one.
         const destination = args.at(-1);
         const writes = destination && /\.(mp4|wav|mkv|mov)$/i.test(destination)
-          ? writeFile(destination, 'rendered').catch(() => undefined)
+          ? writeFile(destination, 'rendered')
           : Promise.resolve();
-        void writes.then(() => child.emit('close', 0));
+        void writes
+          .then(() => child.emit('close', 0))
+          .catch(() => child.emit('close', 1));
       }
     });
     return child;
@@ -100,6 +102,12 @@ describe('video_stitch — input parsing (injected)', () => {
   });
   afterAll(async () => {
     await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  });
+
+  it('reports a failed fake render write as a failed ffmpeg exit', async () => {
+    const child = makeFakeSpawn([])('ffmpeg', ['-y', join(root, 'missing', 'render.mp4')]);
+    const code = await new Promise<number | null>((resolve) => child.once('close', resolve));
+    expect(code).toBe(1);
   });
 
   it('forwards per-boundary transitions to ffmpeg', async () => {

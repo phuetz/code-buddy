@@ -5,6 +5,7 @@
  * Automatically switches to backup providers when failures occur.
  */
 
+import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
 import type {
@@ -436,7 +437,7 @@ export class ModelProfileManager extends EventEmitter {
       providerId: 'ollama',
       authType: 'api_key',
       apiKey: 'ollama',
-      baseUrl: 'http://localhost:11434/v1',
+      baseUrl: getOllamaV1BaseUrl(),
       priority: 50,
       models: ['llama3.2', 'codellama', 'mistral', 'mixtral', '*'],
       enabled: false, // Enable manually if Ollama is running

@@ -63,6 +63,12 @@ export interface GpuMediaWorkerServer {
   getJob(id: string): StoredGpuMediaJob | undefined;
 }
 
+export const DEFAULT_GPU_MEDIA_WORKER_ID = 'codebuddy-gpu-worker';
+
+export function resolveGpuMediaWorkerId(workerId: string | undefined): string {
+  return workerId ?? DEFAULT_GPU_MEDIA_WORKER_ID;
+}
+
 const BODY_LIMIT = 1024 * 1024;
 const ASSET_BODY_LIMIT = 64 * 1024 * 1024;
 const LOG_LIMIT = 1024 * 1024;
@@ -595,7 +601,7 @@ export function createGpuMediaWorkerServer(
         const extra = deps.capabilities ? await deps.capabilities() : {};
         json(response, 200, {
           protocolVersion: 1,
-          workerId: config.workerId ?? 'codebuddy-gpu-worker',
+          workerId: resolveGpuMediaWorkerId(config.workerId),
           jobs: Object.keys(config.runners),
           queueDepth: [...jobs.values()].filter((job) => job.status === 'queued').length,
           activeJobs: [...jobs.values()].filter((job) => job.status === 'running').length,

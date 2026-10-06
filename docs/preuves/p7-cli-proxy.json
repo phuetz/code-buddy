@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-proxy",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "311eb0ba40cda0e099885602338afafadf74fb19dfbc8a7543b8cad008d188b8",
+  "artifact": "docs/preuves/p7-cli-proxy.log",
+  "summary": "GET 200, modèle qwen3:4b-instruct ; POST 200, object=chat.completion, content=READY ; proxy arrêté code 0."
+}

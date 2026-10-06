@@ -96,7 +96,7 @@ describe('BrowserOperatorRuntimeCard', () => {
       runtimeId: runtime.runtimeId,
       ownerSessionId: runtime.ownerSessionId,
       expectedDraftHash: runtime.draftHash,
-      approvedBy: 'Patrice',
+      approvedBy: 'Utilisateur',
     }));
   });
 

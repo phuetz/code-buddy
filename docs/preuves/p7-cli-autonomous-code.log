@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-autonomous-code
+Commande: buddy autonomous-code --task-file <QA_TASK> --run-verification --json
+Attendu: Contrat borné exécuté et commande de vérification réelle réussie.
+Observé: Code 0 ; autoExecutable=true ; vérification node -e : status=passed, exitCode=0 ; aucun fichier modifié.
+Verdict: prouvée
+Limite: Contrat sans édition ni correction automatique.

@@ -189,8 +189,8 @@ describe('Middleware Helper Functions', () => {
       const model = defaultModelInfo();
       expect(model.name).toBe('unknown');
       expect(model.maxContextTokens).toBe(128000);
-      expect(model.inputPricePerMillion).toBe(0.15);
-      expect(model.outputPricePerMillion).toBe(0.60);
+      expect(model.inputPricePerMillion).toBe(3);
+      expect(model.outputPricePerMillion).toBe(15);
     });
   });
 });

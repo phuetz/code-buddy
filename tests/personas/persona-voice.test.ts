@@ -1,4 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
+const originalUserName = vi.hoisted(() => {
+  const original = process.env.CODEBUDDY_USER_NAME;
+  process.env.CODEBUDDY_USER_NAME = 'Alex';
+  return original;
+});
+afterAll(() => {
+  if (originalUserName === undefined) delete process.env.CODEBUDDY_USER_NAME;
+  else process.env.CODEBUDDY_USER_NAME = originalUserName;
+});
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
@@ -56,7 +65,7 @@ describe('persona voice layer + persistence', () => {
     expect(v.spokenPrompt).toContain('Lisa');
     expect(v.spokenPrompt).toContain('petite amie numérique');
     expect(v.spokenPrompt).toContain('petite copine vocale virtuelle');
-    expect(v.greeting).toContain('Te revoilà Patrice');
+    expect(v.greeting).toContain('Te revoilà Alex');
   });
 
   it('a custom persona supplies its own voice .onnx + name (the per-personality voice)', async () => {

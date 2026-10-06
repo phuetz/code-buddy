@@ -2,6 +2,7 @@
  * Diagnostics for the native Hermes-inspired Code Buddy profile.
  */
 
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -175,7 +176,7 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     credentialEnv: [],
     modelEnv: ['OLLAMA_MODEL'],
     baseUrlEnv: ['OLLAMA_HOST'],
-    defaultBaseUrl: 'http://localhost:11434',
+    defaultBaseUrl: getOllamaBaseUrl(),
     local: true,
     notes: ['Local provider; readiness means the endpoint is configured, not that a model pull was tested.'],
     remediation: ['Start Ollama and pull the selected model if local inference fails.'],

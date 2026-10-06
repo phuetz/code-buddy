@@ -18,6 +18,7 @@ import { retry, RetryStrategies, RetryPredicates } from '../utils/retry.js';
 import { safeStreamRead, handleStreamError } from '../utils/stream-helpers.js';
 import { UserFriendlyError, ModelNotFoundError, ProviderNotAvailableError } from '../utils/errors.js';
 import { getErrorMessage } from '../types/index.js';
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 
 // ============================================================================
 // Types
@@ -500,7 +501,7 @@ export class WebLLMProvider extends EventEmitter implements LocalLLMProvider {
  * Usage:
  * ```typescript
  * const provider = new OllamaProvider();
- * await provider.initialize({ model: 'llama3.1', endpoint: 'http://localhost:11434' });
+ * await provider.initialize({ model: 'llama3.1', endpoint: getOllamaBaseUrl() });
  * const response = await provider.complete([{ role: 'user', content: 'Hello!' }]);
  * ```
  */
@@ -510,11 +511,11 @@ export class OllamaProvider extends EventEmitter implements LocalLLMProvider {
 
   private config: LocalProviderConfig | null = null;
   private ready = false;
-  private endpoint: string = 'http://localhost:11434';
+  private endpoint: string = getOllamaBaseUrl();
 
   async initialize(config: LocalProviderConfig): Promise<void> {
     this.config = config;
-    this.endpoint = config.endpoint || 'http://localhost:11434';
+    this.endpoint = config.endpoint || getOllamaBaseUrl();
 
     // Check if Ollama is running
     const available = await this.isAvailable();

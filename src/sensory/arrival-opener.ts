@@ -28,7 +28,7 @@ export interface ArrivalContext {
   lastSeenAt?: number | null;
   /** Recently-used opener texts to avoid (anti-repetition ring). */
   recent?: string[];
-  /** Optional name to address (e.g. "Patrice"). */
+  /** Optional name to address (e.g. a configured user name). */
   name?: string;
   /** False when camera identity did not match the configured user. */
   recognizedUser?: boolean;

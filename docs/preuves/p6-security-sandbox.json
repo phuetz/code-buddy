@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "security-sandbox",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:07.003085+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "e434ebdbe10ea031c6b8c4be255c5f7eda9551a59cfdd6e3371fdc650ec7b2ab",
+  "artifact": "docs/preuves/p6-security-sandbox.log",
+  "summary": "Code 0 ; bubblewrap actif ; sandbox-ok ; touch /tmp refusé : Read-only file system."
+}

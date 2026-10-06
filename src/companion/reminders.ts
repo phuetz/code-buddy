@@ -1,5 +1,5 @@
 /**
- * Reminders — the robot reminds Patrice to do things (meds…) and he flags them done.
+ * Reminders — the robot reminds the user to do things (meds…), and the user flags them done.
  *
  * Persisted as JSON (companion-subsystem style, like sensory-rules.json) so it's portable and
  * hand-editable: `~/.codebuddy/reminders.json` (definitions) + `~/.codebuddy/companion/
@@ -21,6 +21,7 @@ import { mkdir, appendFile, stat, rename } from 'node:fs/promises';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { resolveUserName } from './user-name.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 /** A reminder definition (shape mirrors prospective-memory's Reminder; stored as JSON). */
 export interface Reminder {
@@ -51,7 +52,7 @@ export interface Reminder {
 export type ReminderLogEvent = 'fired' | 'done' | 'missed' | 'renag';
 
 function remindersFile(): string {
-  return process.env.CODEBUDDY_REMINDERS_FILE || join(homedir(), '.codebuddy', 'reminders.json');
+  return process.env.CODEBUDDY_REMINDERS_FILE || getCodeBuddyPath('reminders.json');
 }
 
 /**
@@ -604,7 +605,7 @@ export function parseVoiceReminder(text: string, now: Date = new Date()): AddRem
 }
 
 // ── voice MANAGEMENT of reminders (list / remove / disable) ────────────
-// So Patrice can say "supprime le rappel du train" instead of needing the CLI. The parse + fuzzy
+// So the user can say "supprime le rappel du train" instead of needing the CLI. The parse + fuzzy
 // match + spoken-summary logic is pure/testable; `handleReminderVoiceCommand` wires it to the store.
 
 /** Lowercase, strip diacritics + punctuation → clean word sequence (STT-friendly). */

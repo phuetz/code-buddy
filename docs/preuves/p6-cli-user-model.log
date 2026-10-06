@@ -1,0 +1,43 @@
+Fonctionnalité : cli-user-model
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy user-model observe … ; list ; accept <id> --by QA ; show --json
+Attendu : Préférence factice proposée, acceptée et relue.
+Observé : Codes 0 ; observation pending puis accepted, reviewedBy=QA.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- cli-user-model-observe ---
+$ buddy user-model observe Fixture prefers local tools --kind preference --note test fixture
+Code de sortie : 0
+Proposed observation [um-mummyurs2g9] (preference): Fixture prefers local tools
+Accept it with: buddy user-model accept um-mummyurs2g9 --by <name>
+
+--- cli-user-model-list ---
+$ buddy user-model list
+Code de sortie : 0
+[um-mummyurs2g9] PENDING preference: Fixture prefers local tools  — 2026-09-29
+
+--- cli-user-model-accept ---
+$ buddy user-model accept um-mummyurs2g9 --by QA
+Code de sortie : 0
+Accepted observation um-mummyurs2g9 (preference): Fixture prefers local tools
+
+--- cli-user-model-show ---
+$ buddy user-model show --json
+Code de sortie : 0
+[
+  {
+    "id": "um-mummyurs2g9",
+    "kind": "preference",
+    "content": "Fixture prefers local tools",
+    "status": "accepted",
+    "createdAt": 1790683913800,
+    "source": "manual",
+    "provenance": {
+      "note": "test fixture"
+    },
+    "reviewedAt": 1790683922827,
+    "reviewedBy": "QA"
+  }
+]

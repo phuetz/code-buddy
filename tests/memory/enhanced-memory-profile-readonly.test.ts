@@ -28,6 +28,7 @@ describe('R34 — user-profile.json illisible n\'est pas un profil vide', () => 
     fs.mkdirSync(testRoot, { recursive: true });
     home = fs.mkdtempSync(path.join(testRoot, 'enhanced-profile-'));
     homeHolder.dir = home;
+    vi.stubEnv('CODEBUDDY_HOME', path.join(home, '.codebuddy'));
     memory = null;
   });
 
@@ -35,6 +36,7 @@ describe('R34 — user-profile.json illisible n\'est pas un profil vide', () => 
     memory?.dispose();
     await memory?.flush();
     memory = null;
+    vi.unstubAllEnvs();
     fs.rmSync(home, { recursive: true, force: true });
     try {
       fs.rmdirSync(testRoot);

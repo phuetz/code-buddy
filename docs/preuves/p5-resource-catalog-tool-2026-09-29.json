@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "resource-catalog-tool",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "ace509f3427f946ff415301022a794e7e9d414db40ebb4977015352a1963828f",
+  "artifact": "docs/preuves/p5-resource-catalog-tool-2026-09-29.log",
+  "summary": "Outil resource_catalog réellement appelé dans un tour Ollama et sélection vérifiée."
+}

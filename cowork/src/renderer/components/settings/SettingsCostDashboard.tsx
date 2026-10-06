@@ -101,7 +101,7 @@ const DailyBarChart: React.FC<{ data: DailyCostPoint[] }> = ({ data }) => {
                 y={chartHeight + 14}
                 fontSize="8"
                 textAnchor="middle"
-                fill="var(--color-text-muted)"
+                fill="var(--color-text-secondary)"
               >
                 {point.date.slice(5)}
               </text>

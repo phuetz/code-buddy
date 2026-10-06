@@ -1071,7 +1071,7 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     promptProfile: 'lite',
   },
   // Qwen3.8-27B — dense multimodal, 262k native context, Apache 2.0 (released
-  // 2026-08 ; Patrice rates it near Opus 5). Served LOCALLY (gpuNode 2×RTX3090:
+  // 2026-08 ; the owner rated it near Opus 5). Served LOCALLY (a local dual-GPU machine:
   // FP8 ~28 GB tensor-parallel, or Q4 ~16 GB on a single 3090). Full-capability
   // entry placed BEFORE the conservative `qwen3*` glob (first-match-wins, l.65) —
   // unlike the small local qwen3 builds, the 27B drives the agent loop, does

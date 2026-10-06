@@ -1,0 +1,7 @@
+Date: 2026-09-29T12:06:27.530Z
+Révision testée: 82a7cb9bcb59d02537e97cf41147cd3e1c5a8569
+Exécution: CLI compilée du checkout (node dist/index.js), HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy provision db-auth --target local --dir <QA_PROJECT>/web-app --name qa-web --apply --json
+Attendu: Les fichiers de base et authentification sont matérialisés.
+Observé: mode=apply; target=local; written=true; 14 fichiers écrits dont db/migrations/0001_init.sql et src/auth/pages/SignIn.tsx; migration pending; conteneurs non lancés. Code 0.
+Verdict: prouvée

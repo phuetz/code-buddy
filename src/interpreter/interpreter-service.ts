@@ -1,3 +1,5 @@
+import { getPricingPer1M } from '../config/model-pricing.js';
+
 /**
  * Interpreter Service
  *
@@ -50,7 +52,6 @@ import type {
 
 import {
   DEFAULT_INTERPRETER_CONFIG,
-  DEFAULT_MODEL_PRICING,
 } from './types.js';
 
 import {
@@ -533,7 +534,7 @@ export class InterpreterService extends EventEmitter {
    * Calculate cost for tokens
    */
   calculateCost(model: string, tokens: TokenUsage): number {
-    const pricing = this.config.pricing[model] ?? DEFAULT_MODEL_PRICING['grok-3-mini'];
+    const pricing = this.config.pricing[model] ?? getPricingPer1M(model);
     if (!pricing) {
       throw new Error(`No pricing available for model "${model}" and no default fallback pricing found`);
     }

@@ -17,7 +17,7 @@ nativeEngine:
   triggers:
     - edit file
     - change file
-    - modify
+    - modify file
     - update file
     - fix in file
   examples:

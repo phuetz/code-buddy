@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildCatalog, renderCatalogMarkdown } from '../../src/catalog/status.js';
+import { buildCatalog, currentCatalogSourceDigest, renderCatalogMarkdown, STALE_PROOF_REASON } from '../../src/catalog/status.js';
 import { registerCatalogCommands } from '../../src/commands/cli/catalog-command.js';
 
 const REVISION = 'a'.repeat(40);
@@ -79,13 +79,26 @@ describe('catalog states and evidence', () => {
       expect(feature?.states.wired, definition.id).toBe('vrai');
       expect(feature?.states.deployed, definition.id).toBe('inconnu');
       if (feature?.states.testedInSituation !== 'vrai') {
-        expect(definition.verificationLimit, definition.id).toBeTruthy();
-        expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
+        // A merge can age a genuine execution trace without changing the inventory's
+        // editorial limit. Require a visible reason, never a fabricated current proof.
+        const staleProof = feature?.states.testedInSituation === 'inconnu'
+          && feature.latestEvidence !== null
+          && feature.reasons.includes(STALE_PROOF_REASON);
+        expect(Boolean(definition.verificationLimit) || staleProof, definition.id).toBe(true);
+        if (definition.verificationLimit) {
+          expect(feature?.reasons, definition.id).toContain(definition.verificationLimit);
+        }
       }
     }
-    const failedReplay = catalog.features.find((feature) => feature.id === 'cli-run');
-    expect(failedReplay?.states.testedInSituation).toBe('faux');
-    expect(failedReplay?.latestEvidence?.artifact).toBe('docs/preuves/inventaire-cli-run-echec.log');
+    const replay = catalog.features.find((feature) => feature.id === 'cli-run');
+    expect(replay?.latestEvidence?.artifact).toBe('docs/preuves/p5-cli-run-2026-09-29.log');
+    expect(replay?.latestEvidence?.result).toBe('passed');
+    if (replay?.latestEvidence?.sourceDigest === currentCatalogSourceDigest(root, 'cli-run')) {
+      expect(replay?.states.testedInSituation).toBe('vrai');
+    } else {
+      expect(replay?.states.testedInSituation).toBe('inconnu');
+      expect(replay?.reasons).toContain(STALE_PROOF_REASON);
+    }
   });
 
   it('finds each declared entrypoint in the real source inventory', () => {
@@ -155,7 +168,7 @@ describe('catalog states and evidence', () => {
     expect(feature.lastProof?.revision).toBe(OLD_REVISION);
   });
 
-  it('uses a source digest to keep a proof current across documentation changes only', () => {
+  it('keeps legacy whole-inventory proof digests valid while their sources match', () => {
     const root = fixture();
     proof(root, OLD_REVISION);
     const digest = createHash('sha256');
@@ -170,6 +183,34 @@ describe('catalog states and evidence', () => {
     record.sourceDigest = digest.digest('hex');
     writeFileSync(recordPath, JSON.stringify(record));
     expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.testedInSituation).toBe('vrai');
+    put(root, 'src/catalog/feature.ts', 'export const feature = false;');
+    expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.testedInSituation).toBe('inconnu');
+  });
+
+  it('keeps a feature-scoped proof across unrelated inventory edits, but not source or wiring edits', () => {
+    const root = fixture();
+    proof(root, OLD_REVISION);
+    const recordPath = path.join(root, 'docs/preuves/feature.json');
+    const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+    record.sourceDigest = currentCatalogSourceDigest(root, 'feature');
+    expect(record.sourceDigest).toMatch(/^[0-9a-f]{64}$/);
+    writeFileSync(recordPath, JSON.stringify(record));
+
+    const inventoryPath = path.join(root, 'docs/catalog/inventory.json');
+    const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+    inventory.features[0].title = 'Renamed feature';
+    inventory.features.push({ id: 'other-feature', title: 'Other feature' });
+    writeFileSync(inventoryPath, JSON.stringify(inventory));
+    expect(currentCatalogSourceDigest(root, 'feature')).toBe(record.sourceDigest);
+    expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.testedInSituation).toBe('vrai');
+
+    inventory.features[0].entrypoint.checks[1].contains = "addLazyCommandGroup(program, 'feature'";
+    writeFileSync(inventoryPath, JSON.stringify(inventory));
+    expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.wired).toBe('vrai');
+    expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.testedInSituation).toBe('inconnu');
+
+    inventory.features[0].entrypoint.checks[1].contains = 'registerFeatureCommands(program)';
+    writeFileSync(inventoryPath, JSON.stringify(inventory));
     put(root, 'src/catalog/feature.ts', 'export const feature = false;');
     expect(buildCatalog({ root, revision: REVISION }).features[0]!.states.testedInSituation).toBe('inconnu');
   });

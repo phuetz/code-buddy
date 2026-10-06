@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "dgm-capability-benchmark",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "d5e7133c3b9f867d85e32a00a72a5a2e6c028cb8c67a1f33085a662df67cd78c",
+  "artifact": "docs/preuves/p7-dgm-capability-benchmark.log",
+  "summary": "Code 0 ; kind=continuous_capability_benchmark ; provider=ollama ; scenarios=1 ; score=0 ; status=ok."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "media-film-assemble",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.999824+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "8cf8b2a8b418bcf3acff8baf976073eec38f0acc549d1d612ad47494b9eba430",
+  "artifact": "docs/preuves/p6-media-film-assemble.log",
+  "summary": "Code 0 ; quality PASS, durée 4 s, audio -24.1 dB, noir 0 s ; MP4 vérifié par ffprobe."
+}

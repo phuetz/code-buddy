@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-nodes",
+  "kind": "integration",
+  "result": "failed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "5cb1733de2f942f3e9508025db692bff5f45f0ec3b26dbf690bb37e0a444da7e",
+  "artifact": "docs/preuves/p7-cli-nodes.log",
+  "summary": "pair code 0 « Pairing Code: <CODE> » ; pending code 0 « No pending pairing requests. »."
+}

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-acp",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "ec3f71bc75989f7f3da54a3bc2e31f56870551bdb7407cadf5034ca6b5e748fe",
+  "artifact": "docs/preuves/p7-cli-acp.log",
+  "summary": "Code 0 ; protocolVersion=1 ; sessionId émis puis présent dans session/list."
+}

@@ -15,6 +15,7 @@
  *   - the legacy path found no key.
  */
 
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 import { getSettingsManager } from '../utils/settings-manager.js';
 import { detectProviderFromEnv } from '../utils/provider-detector.js';
 import { inferProvider } from '../config/resolve-model.js';
@@ -195,7 +196,7 @@ function resolveExplicitOllamaModel(explicitModel: string | undefined): Resolved
   const model = explicitModel?.trim();
   if (!model || !isLocalOllamaModel(model)) return null;
 
-  let host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+  let host = getOllamaBaseUrl();
   if (!/^https?:\/\//i.test(host)) host = `http://${host}`;
   if (!host.endsWith('/v1')) host = host.replace(/\/+$/, '') + '/v1';
 

@@ -1179,11 +1179,22 @@ async function transcribeWavOneShot(
   return new Promise<string>((resolve, reject) => {
     // Capture stderr (was ignored) so an STT failure is LOUD in the journal, not silent.
     const proc = spawn(python, ['-c', py, wav], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const timeoutMs = numericEnv('CODEBUDDY_SPEECH_ONESHOT_TIMEOUT_MS', 120_000);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGKILL');
+    }, timeoutMs);
     let out = '';
     let err = '';
     proc.stdout.on('data', (d) => (out += String(d)));
     proc.stderr.on('data', (d) => (err += String(d)));
     proc.on('close', (code) => {
+      clearTimeout(timeout);
+      if (timedOut) {
+        reject(new Error(`faster-whisper STT timed out after ${timeoutMs}ms`));
+        return;
+      }
       if (code !== 0) {
         const cause = err.trim().slice(0, 300) || `process exited with code ${code}`;
         logger.warn(
@@ -1195,6 +1206,7 @@ async function transcribeWavOneShot(
       resolve(out.trim());
     });
     proc.on('error', (e) => {
+      clearTimeout(timeout);
       logger.warn(
         `[speech] STT spawn failed (python='${python}'): ${e instanceof Error ? e.message : String(e)}`
       );
@@ -1217,11 +1229,22 @@ async function transcribeWavParakeetOneShot(
   ].join('\n');
   return new Promise<string>((resolve, reject) => {
     const proc = spawn(python, ['-c', py, wav], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const timeoutMs = numericEnv('CODEBUDDY_SPEECH_ONESHOT_TIMEOUT_MS', 120_000);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      proc.kill('SIGKILL');
+    }, timeoutMs);
     let out = '';
     let err = '';
     proc.stdout.on('data', (d) => (out += String(d)));
     proc.stderr.on('data', (d) => (err += String(d)));
     proc.on('close', (code) => {
+      clearTimeout(timeout);
+      if (timedOut) {
+        reject(new Error(`Parakeet STT timed out after ${timeoutMs}ms`));
+        return;
+      }
       const lines = out
         .split(/\r?\n/)
         .map((line) => line.trim())
@@ -1238,6 +1261,7 @@ async function transcribeWavParakeetOneShot(
       resolve(text.trim());
     });
     proc.on('error', (e) => {
+      clearTimeout(timeout);
       logger.warn(
         `[speech] Parakeet STT spawn failed (python='${python}'): ${e instanceof Error ? e.message : String(e)}`
       );
@@ -1300,6 +1324,41 @@ function disposeSherpaRustWorker(worker: FasterWhisperWorker): void {
   worker.rl.close();
   worker.proc.stdin.destroy();
   worker.proc.kill();
+}
+
+/** Release idle persistent STT processes after a finite batch (notably video STT).
+ * Interactive speech can start a new worker on its next request. Never interrupt a
+ * request owned by another caller. Wait for child close so pipes cannot keep a
+ * headless CLI process alive after its result has been returned. */
+export async function closeIdleSpeechWorkers(): Promise<void> {
+  const workers: Array<[FasterWhisperWorker | null, (worker: FasterWhisperWorker) => void]> = [
+    [fasterWhisperWorker, disposeFasterWhisperWorker],
+    [parakeetWorker, disposeParakeetWorker],
+    [sherpaRustWorker, disposeSherpaRustWorker],
+  ];
+  await Promise.all(workers.map(async ([worker, dispose]) => {
+    if (!worker || worker.pending.size > 0) return;
+    const proc = worker.proc;
+    if (proc.stdin.destroyed && proc.stdout?.destroyed && proc.stderr?.destroyed) {
+      dispose(worker);
+      return;
+    }
+    const closed = new Promise<void>((resolve) => proc.once('close', () => resolve()));
+    dispose(worker);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const closedPromptly = await Promise.race([
+      closed.then(() => true),
+      new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), 2_000); }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (!closedPromptly) {
+      proc.kill('SIGKILL');
+      await Promise.race([closed, new Promise<void>((resolve) => {
+        const forcedTimer = setTimeout(resolve, 1_000);
+        void closed.then(() => clearTimeout(forcedTimer));
+      })]);
+    }
+  }));
 }
 
 async function createSherpaRustWorker(

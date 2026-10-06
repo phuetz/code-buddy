@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-proxy
+Commande: buddy proxy --host 127.0.0.1 --port 18732 --no-auth ; GET /v1/models ; POST /v1/chat/completions
+Attendu: API compatible OpenAI répond avec Ollama.
+Observé: GET 200, modèle qwen3:4b-instruct ; POST 200, object=chat.completion, content=READY ; proxy arrêté code 0.
+Verdict: prouvée
+Limite: Sans authentification, sur loopback et port jetable seulement.

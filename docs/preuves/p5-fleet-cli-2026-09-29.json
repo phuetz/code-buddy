@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "fleet-cli",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "9c0c99c4f7f382ef4ce4524d9c613911b0df7e11494e2efa8041f3bdb03e6946",
+  "artifact": "docs/preuves/p5-fleet-cli-2026-09-29.log",
+  "summary": "CLI Fleet connectée au serveur local jetable."
+}

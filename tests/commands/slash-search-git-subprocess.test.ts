@@ -50,7 +50,7 @@ describe('slash commands against real ripgrep/git processes', () => {
   const savedCeiling = process.env.GIT_CEILING_DIRECTORIES;
 
   beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'cb-slash-real-'));
+    root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'cb-slash-real-')));
     // Never let git discover a repository above the temporary fixture.
     process.env.GIT_CEILING_DIRECTORIES = root;
     project = createFixture(root);

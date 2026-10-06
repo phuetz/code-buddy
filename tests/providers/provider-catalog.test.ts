@@ -158,7 +158,7 @@ describe('runtime provider catalog', () => {
     const resolved = resolveProviderFromCatalog({
       hasChatGptOAuth: true,
       env: {
-        OLLAMA_HOST: 'http://localhost:11434',
+        OLLAMA_HOST: 'http://127.0.0.1:11434',
       },
     });
 
@@ -198,7 +198,7 @@ describe('runtime provider catalog', () => {
     expect(resolved).toMatchObject({
       provider: 'ollama',
       apiKey: 'ollama',
-      baseURL: 'http://localhost:11434/v1',
+      baseURL: 'http://127.0.0.1:11434/v1',
       source: 'override',
     });
   });

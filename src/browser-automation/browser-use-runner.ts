@@ -22,6 +22,7 @@
 
 import { spawn, spawnSync } from 'child_process';
 import { logger } from '../utils/logger.js';
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,7 +53,7 @@ export interface BrowserUseRunnerOptions {
   model?: string;
   /**
    * Ollama host the local agent should connect to. Defaults to `$OLLAMA_HOST`,
-   * then `http://localhost:11434`.
+   * then `http://127.0.0.1:11434`.
    */
   ollamaHost?: string;
   /**
@@ -99,7 +100,7 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_LOCAL_TIMEOUT_MS = 180_000;
 const BROWSER_USE_API_URL = 'https://api.browser-use.com/api/v1/run-task';
 const DEFAULT_LOCAL_MODEL = 'qwen2.5:7b-instruct';
-const DEFAULT_OLLAMA_HOST = 'http://localhost:11434';
+const DEFAULT_OLLAMA_HOST = getOllamaBaseUrl();
 
 /** Sentinel the Python entrypoint wraps its JSON result with, so we can pull it
  * out of browser-use's very noisy step-by-step stdout (analogous to camofox's
@@ -531,7 +532,7 @@ function classifyLocalError(output: string): string {
   }
 
   if (/ConnectionError|Connection refused|Failed to connect|11434/i.test(text)) {
-    return 'Could not reach the local Ollama server. Start Ollama (default http://localhost:11434) or set OLLAMA_HOST, and pull a tool-calling model (e.g. qwen2.5:7b-instruct).';
+    return 'Could not reach the local Ollama server. Start Ollama (default http://127.0.0.1:11434) or set OLLAMA_HOST, and pull a tool-calling model (e.g. qwen2.5:7b-instruct).';
   }
 
   const firstLine = text.split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? text.slice(0, 200);

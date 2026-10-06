@@ -1,0 +1,37 @@
+Fonctionnalité : cli-film
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : buddy film assemble p6-demo ; buddy film status p6-demo
+Attendu : Deux clips ffmpeg prêts montés, projet relu.
+Observé : Codes 0 ; 2/2 scènes ready, quality PASS, 4 secondes ; MP4 90285 octets, ffprobe 4.000000 s.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- media-film-assemble ---
+$ buddy film assemble p6-demo
+Code de sortie : 0
+[2026-09-29T12:14:54.742Z]  INFO  [film-assemble] 2 clip(s), engine=xfade, 64x64@12, ~4s
+[2026-09-29T12:14:55.040Z]  INFO  [film-quality] PASS — 4s, audio=-24.1dB, black=0s
+[2026-09-29T12:14:55.041Z]  INFO  [film-producer] 'p6-demo' → <WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-demo-1790684094741-e54e1c7f-70fc-4dc0-a8e7-37bf4bd8d564.mp4 (2 scene(s))
+
+🎬  p6-demo — 2/2 scene(s) ready
+   ✓ scene-1    ready
+   ✓ scene-2    ready
+
+   film: <WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-demo-1790684094741-e54e1c7f-70fc-4dc0-a8e7-37bf4bd8d564.mp4
+   quality: PASS — 4s, audio -24.1dB
+
+--- cli-film-status ---
+$ buddy film status p6-demo
+Code de sortie : 0
+
+🎬  p6-demo
+   2/2 ready, 0 failed, 0 pending · engine xfade, transition 'cut'
+   ✓ scene-1    ready       red local clip
+   ✓ scene-2    ready       blue local clip
+
+   last film: <WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-demo-1790684094741-e54e1c7f-70fc-4dc0-a8e7-37bf4bd8d564.mp4
+   recent:
+     12:14:50 fixture — two ffmpeg clips
+     12:14:54 assembled — 2 clip(s) → <WORKTREE>/_qa/preuves-p6/work/.codebuddy/media-generation/films/p6-demo-1790684094741-e54e1c7f-70fc-4dc0-a8e7-37bf4bd8d564.mp4
+     12:14:55 quality-pass — ok

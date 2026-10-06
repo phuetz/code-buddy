@@ -1,0 +1,9 @@
+Date: 2026-09-29T14:05:37Z
+Révision testée: 72c9ed8591b0851a404952435f0f9961185f6445
+Environnement: checkout local, HOME=<QA_HOME>, projet=<QA_PROJECT>; Ollama local si modèle requis.
+Fonctionnalité: cli-cron
+Commande: buddy cron add/list/remove p7-fixture
+Attendu: Tâche créée, relue et retirée.
+Observé: Codes 0/0/0 ; « Cron job created » ; liste contenant p7-fixture ; « Cron job removed ».
+Verdict: prouvée
+Limite: Une exécution locale unique ; autres environnements non vérifiés.

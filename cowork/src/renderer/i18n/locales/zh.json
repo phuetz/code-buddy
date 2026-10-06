@@ -200,7 +200,7 @@
   "enrollment": {
     "title": "登记人脸",
     "nameLabel": "姓名",
-    "namePlaceholder": "Patrice",
+    "namePlaceholder": "姓名",
     "aliasesLabel": "别名（用逗号分隔）",
     "aliasesPlaceholder": "老板, 队友",
     "aliasesHelp": "别名是可选称呼，AI 可根据上下文用它们来称呼你。",

@@ -1,5 +1,5 @@
 /**
- * Event follow-ups — the "companion who remembers your day" loop. When Patrice mentions a dated
+ * Event follow-ups — the "companion who remembers your day" loop. When the user mentions a dated
  * future event IN A CONVERSATION WITH LISA ("j'ai un gros déploiement jeudi"), we capture it and,
  * once the day has passed, Lisa proactively asks how it went ("alors, ce déploiement de jeudi ?").
  *
@@ -9,7 +9,7 @@
  *     fires when the respond gate said yes) — NOT on every ambient/mistranscribed utterance, so
  *     Lisa never follows up on something she overheard from the TV;
  *   - **confirm at capture** (the caller speaks `confirmationLine()` right after) so a mis-heard
- *     capture is corrected immediately instead of ambushing Patrice days later.
+ *     capture is corrected immediately instead of ambushing the user days later.
  *
  * Extraction is an injectable seam (`EventExtractor`) — default is an LLM (a passive mention isn't a
  * command, so regex can't reliably find it), gated behind a cheap `hasFutureCue()` so the LLM only
@@ -23,6 +23,7 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 export interface EventFollowUp {
   id: string;
@@ -50,7 +51,7 @@ export interface EventCandidate {
 export type EventExtractor = (text: string, nowMs: number) => Promise<EventCandidate | null>;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Don't ask about an event that came due more than this long ago (Patrice was away → let it lapse). */
+/** Don't ask about an event that came due more than this long ago (the user was away → let it lapse). */
 export const FOLLOWUP_GRACE_DAYS = 10;
 /** Don't capture events further out than this (keeps the LLM's relative-date math honest). */
 export const CAPTURE_HORIZON_DAYS = 21;
@@ -72,7 +73,7 @@ export function hasFutureCue(text: string): boolean {
 function defaultStatePath(): string {
   return (
     process.env.CODEBUDDY_EVENT_FOLLOWUPS_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'event-followups.json')
+    getCodeBuddyPath('companion', 'event-followups.json')
   );
 }
 

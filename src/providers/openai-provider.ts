@@ -1,3 +1,5 @@
+import { getPricingPer1M } from '../config/model-pricing.js';
+
 /**
  * OpenAI Provider (GPT)
  *
@@ -185,8 +187,7 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   getPricing(): { input: number; output: number } {
-    // GPT-4o pricing per 1M tokens
-    return { input: 2.5, output: 10 };
+    return getPricingPer1M(this.config?.model ?? this.defaultModel);
   }
 
   supports(feature: ProviderFeature): boolean {

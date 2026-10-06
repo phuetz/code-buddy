@@ -117,7 +117,7 @@ Actions:
                                       list_directory, search}. With
                                       --stream, prints peer:chunk frames
                                       live (uses peer.tool.invoke.stream).
-                                      Example: /fleet tool gpuNode
+                                      Example: /fleet tool <pair>
                                       view_file {"file_path":"README.md"}
   route <prompt>                      Choose the best peer/model for a task
             [--privacy public|sensitive]
@@ -1304,7 +1304,7 @@ export async function handleFleet(args: string[]): Promise<CommandHandlerResult>
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return textResult(`Fleet listener connect failed: ${msg}`);
+      return textResult(`Fleet listener connect failed: ${msg}${fleetListenFailureHint(url, msg)}`);
     }
   }
 
@@ -1971,4 +1971,33 @@ export function _resetFleetHandlerForTests(): void {
     peer.listener.disconnect().catch(() => { /* ignore */ });
   }
   reg.clear();
+}
+
+/**
+ * Actionable hint for a failed `/fleet listen`. The two first-contact traps:
+ * the peer WebSocket lives at `/ws` (the client opens the URL verbatim), and
+ * `cb_sk_` API keys are only held in the peer's memory — the portable
+ * credential is a JWT minted with the peer's own `JWT_SECRET`.
+ */
+export function fleetListenFailureHint(url: string, message: string): string {
+  const hints: string[] = [];
+  let pathname = '';
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    pathname = '';
+  }
+  if (!pathname.replace(/\/+$/, '').endsWith('/ws')) {
+    const suggested = `${url.replace(/\/+$/, '')}/ws`;
+    hints.push(`The peer WebSocket endpoint is /ws — try: /fleet listen ${suggested} --jwt <token>`);
+  }
+  if (/AUTH_FAILED|Invalid credentials|INVALID_TOKEN/i.test(message)) {
+    hints.push(
+      'Authentication was refused. Mint a token with the SAME JWT_SECRET the peer server was started with ' +
+        '(`JWT_SECRET=<peer secret> buddy fleet token --user <name> --scopes chat,chat:stream,sessions,tools,fleet:listen,peer:invoke`) ' +
+        'and pass it with --jwt. ' +
+        'Without JWT_SECRET, `buddy server` uses a random secret that changes on every restart.',
+    );
+  }
+  return hints.length ? `\n${hints.map((h) => `  → ${h}`).join('\n')}` : '';
 }

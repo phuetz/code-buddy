@@ -497,13 +497,20 @@ describe('hybrid reply — context preamble', () => {
     expect(buildContextPreamble([])).toBe('');
   });
   it('renders the last two exchanges with speaker labels', () => {
+    const previous = process.env.CODEBUDDY_USER_NAME;
+    process.env.CODEBUDDY_USER_NAME = 'Alex';
     const h: HybridTurn[] = [
       { role: 'user', content: 'regarde le fichier A' },
       { role: 'assistant', content: 'le fichier A va bien' },
     ];
-    const p = buildContextPreamble(h);
-    expect(p).toContain('Patrice: regarde le fichier A');
-    expect(p).toContain('Toi: le fichier A va bien');
+    try {
+      const p = buildContextPreamble(h);
+      expect(p).toContain('Alex: regarde le fichier A');
+      expect(p).toContain('Toi: le fichier A va bien');
+    } finally {
+      if (previous === undefined) delete process.env.CODEBUDDY_USER_NAME;
+      else process.env.CODEBUDDY_USER_NAME = previous;
+    }
   });
 });
 

@@ -447,11 +447,11 @@ describe('GeminiProvider', () => {
       expect(pricing).toHaveProperty('output');
     });
 
-    it('should return Gemini 2.0 Flash pricing', () => {
+    it('should return configured Gemini model pricing', () => {
       const pricing = provider.getPricing();
 
-      expect(pricing.input).toBe(0.075);
-      expect(pricing.output).toBe(0.30);
+      expect(pricing.input).toBe(0.30);
+      expect(pricing.output).toBe(2.50);
     });
   });
 

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-security",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "b0a0a3d876d9f525578df48dfb328f29f28d37d35af798b8b0eeea3f60103113",
+  "artifact": "docs/preuves/p5-cli-security-2026-09-29.log",
+  "summary": "Audit de sécurité réel sur le profil et projet jetables."
+}

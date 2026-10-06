@@ -11,6 +11,7 @@ import { join } from 'path';
 import { isCopinePersona } from './personas/index.js';
 import { openerKey } from './reply-augment.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 export type SaidChannel = 'voice' | 'telegram';
 
@@ -27,7 +28,7 @@ const RING_CAP = 32;
 function defaultPath(): string {
   return (
     process.env.CODEBUDDY_COMPANION_RECENT_SAID_FILE ||
-    join(homedir(), '.codebuddy', 'companion', 'recent-said.json')
+    getCodeBuddyPath('companion', 'recent-said.json')
   );
 }
 

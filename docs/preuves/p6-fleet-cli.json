@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "fleet-cli",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:20:06.996003+00:00",
+  "revision": "be71d2dcfaf685e5d885d836bab4d1c73960871b",
+  "sourceDigest": "9c0c99c4f7f382ef4ce4524d9c613911b0df7e11494e2efa8041f3bdb03e6946",
+  "artifact": "docs/preuves/p6-fleet-cli.log",
+  "summary": "status=ok ; read_file=allow, write_file=deny ; serveur arrêté."
+}

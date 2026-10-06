@@ -24,6 +24,7 @@ import { logger } from '../utils/logger.js';
 import { readJsonAtomic, readTextAtomic, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 import { BayesianQualifier } from '../ml/bayesian-qualifier.js';
 import { mmrSelect, type RankedCandidate } from './hybrid-mmr.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 
 export interface MemoryEntry {
   id: string;
@@ -166,7 +167,7 @@ const DEFAULT_CONFIG: MemoryConfig = {
 
 /** Preserve the production JSON-store location while keeping it observable in tests. */
 export function getDefaultMemoryDataDir(): string {
-  return path.join(os.homedir(), '.codebuddy', 'memory');
+  return getCodeBuddyPath('memory');
 }
 
 /**

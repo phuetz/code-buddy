@@ -1,6 +1,6 @@
 /**
  * `buddy research ingest|recall|stats` — feed and query the Collective Knowledge Graph (CKG)
- * with real scientific publications. This is the practical entry point of Patrice's vision:
+ * with real scientific publications. This is the practical entry point of the intended research workflow:
  * study a database of scientific publications, auto-link each discovery to its neighbours, and
  * make the whole thing queryable (cross-lingual) — domain-agnostic (AI, physics, medicine…).
  *

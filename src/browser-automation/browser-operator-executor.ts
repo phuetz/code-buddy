@@ -1012,7 +1012,7 @@ export class BrowserOperatorExecutor {
       throw new Error('BrowserOperatorTargetInspectionRequired: semantic act has no locally bound target selector.');
     }
     const locator = page.locator?.(selector);
-    if (/(?:\bclick\b|\bopen\b|\bchoose\b|\bcontinue\b|cliquer|ouvrir|choisir|continuer)/i.test(instruction)) {
+    if (/(?:\bclick\b|\bopen\b|\bchoose\b|\bcontinue\b|clique(?:r|z)?|ouvrir|choisir|continuer)/i.test(instruction)) {
       if (locator?.click) {
         await locator.click({ button: 'left', clickCount: 1 });
       } else if (page.click) {
@@ -1023,7 +1023,7 @@ export class BrowserOperatorExecutor {
       return `Performed locally bound semantic click on ${selector}`;
     }
     const value = getString(inputs.value) || (inputs.instruction ? getString(inputs.text) : '');
-    if (value && /(?:\btype\b|\bfill\b|\benter\b|saisir|remplir)/i.test(instruction)) {
+    if (value && /(?:\btype\b|\bfill\b|\benter\b|saisir|rempli(?:r|s|ssez))/i.test(instruction)) {
       if (locator?.fill) {
         await locator.fill(value);
       } else if (page.fill) {
@@ -1054,129 +1054,7 @@ export class BrowserOperatorExecutor {
       const request = buildSemanticInspectionRequest(entry, action);
       let rawInspection: unknown;
       try {
-        rawInspection = await page.evaluate((input: {
-          selectorGroups: string[][];
-          intent: string;
-          useActiveElement: boolean;
-          allowIntentFallback: boolean;
-        }) => {
-          const bound = (value: unknown, max = 600) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
-          const isInspectableTarget = (element: Element | null): element is Element => Boolean(
-            element && !['HTML', 'BODY', 'HEAD', 'SCRIPT', 'STYLE'].includes(element.tagName),
-          );
-          const targetText = (element: Element) => {
-            const html = element as HTMLElement;
-            return bound(html.innerText || element.textContent || '', 300);
-          };
-          const selectorFor = (element: Element): string => {
-            const escape = (value: string) => {
-              const css = (globalThis as typeof globalThis & { CSS?: { escape?: (input: string) => string } }).CSS;
-              return css?.escape ? css.escape(value) : value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
-            };
-            const id = element.getAttribute('id');
-            if (id) return `#${escape(id)}`;
-            for (const attribute of ['data-testid', 'data-test-id', 'data-test']) {
-              const value = element.getAttribute(attribute);
-              if (value) return `[${attribute}="${value.replace(/"/g, '\\"')}"]`;
-            }
-            const name = element.getAttribute('name');
-            if (name) return `${element.tagName.toLowerCase()}[name="${name.replace(/"/g, '\\"')}"]`;
-            const aria = element.getAttribute('aria-label');
-            if (aria) return `${element.tagName.toLowerCase()}[aria-label="${aria.replace(/"/g, '\\"')}"]`;
-            const parent = element.parentElement;
-            if (!parent) return element.tagName.toLowerCase();
-            const peers = Array.from(parent.children).filter((candidate) => candidate.tagName === element.tagName);
-            return `${selectorFor(parent)} > ${element.tagName.toLowerCase()}:nth-of-type(${Math.max(1, peers.indexOf(element) + 1)})`;
-          };
-          const labelsFor = (element: Element): string => {
-            const labels: string[] = [];
-            const control = element as HTMLInputElement;
-            if (control.labels) {
-              labels.push(...Array.from(control.labels).map((label) => targetText(label)));
-            }
-            const wrappingLabel = element.closest('label');
-            if (wrappingLabel) labels.push(targetText(wrappingLabel));
-            const labelledBy = element.getAttribute('aria-labelledby') || '';
-            for (const id of labelledBy.split(/\s+/).filter(Boolean)) {
-              const label = document.getElementById(id);
-              if (label) labels.push(targetText(label));
-            }
-            return bound([...new Set(labels.filter(Boolean))].join(' | '), 500);
-          };
-          const describe = (element: Element): BrowserOperatorTargetContext => {
-            const html = element as HTMLElement;
-            const form = element.closest('form') as HTMLFormElement | null;
-            const neighborhoodRoot = element.closest('[role="dialog"],dialog,form,fieldset,section,article,li')
-              || element.parentElement;
-            return {
-              text: targetText(element),
-              ariaLabel: bound(element.getAttribute('aria-label'), 300),
-              labels: labelsFor(element),
-              neighborhood: bound((neighborhoodRoot as HTMLElement | null)?.innerText || neighborhoodRoot?.textContent, 800),
-              formAction: bound(form?.getAttribute('action') || form?.action, 500),
-              formText: bound(form?.innerText || form?.textContent, 800),
-              role: bound(element.getAttribute('role') || html.tagName, 80),
-              inputType: bound(element.getAttribute('type'), 80),
-              name: bound(element.getAttribute('name') || element.id, 200),
-              href: bound(element.getAttribute('href') || (element as HTMLAnchorElement).href, 500),
-            };
-          };
-          const candidates = () => Array.from(document.querySelectorAll(
-            'button,a[href],input,textarea,select,[role="button"],[role="menuitem"],[contenteditable="true"]',
-          )).filter(isInspectableTarget);
-          const findByIntent = (intent: string): Element | null => {
-            const normalized = bound(intent, 500).toLowerCase();
-            const tokens = normalized.split(/[^\p{L}\p{N}]+/u).filter((token) => token.length > 2);
-            let best: { element: Element; score: number } | null = null;
-            for (const element of candidates()) {
-              const context = describe(element);
-              const haystack = `${context.text} ${context.ariaLabel} ${context.labels} ${context.name} ${context.role}`.toLowerCase();
-              const score = (normalized && haystack.includes(normalized) ? 20 : 0)
-                + tokens.filter((token) => haystack.includes(token)).length * 3;
-              if (score > 0 && (!best || score > best.score)) best = { element, score };
-            }
-            return best?.element ?? null;
-          };
-
-          try {
-            const targets: Element[] = [];
-            for (const group of input.selectorGroups) {
-              const target = group.map((selector) => document.querySelector(selector)).find(isInspectableTarget) ?? null;
-              if (target) targets.push(target);
-            }
-            if (input.useActiveElement && isInspectableTarget(document.activeElement)) {
-              targets.push(document.activeElement);
-            }
-            if (
-              targets.length === 0
-              && (input.selectorGroups.length === 0 || input.allowIntentFallback && input.selectorGroups.length === 1)
-              && input.intent
-            ) {
-              const intentTarget = findByIntent(input.intent);
-              if (intentTarget) targets.push(intentTarget);
-            }
-            const expectedTargets = input.selectorGroups.length > 0 ? input.selectorGroups.length : 1;
-            const uniqueTargets = [...new Set(targets)];
-            return {
-              inspected: true as const,
-              targetFound: uniqueTargets.length >= expectedTargets,
-              url: bound(location.href, 1_000),
-              documentTitle: bound(document.title, 300),
-              contexts: uniqueTargets.slice(0, 12).map(describe),
-              resolvedSelectors: uniqueTargets.slice(0, 12).map(selectorFor),
-            };
-          } catch (error) {
-            return {
-              inspected: true as const,
-              targetFound: false,
-              url: bound(location.href, 1_000),
-              documentTitle: bound(document.title, 300),
-              contexts: [],
-              resolvedSelectors: [],
-              error: error instanceof Error ? bound(error.message, 300) : 'target inspection failed',
-            };
-          }
-        }, request);
+        rawInspection = await page.evaluate(executeDOMInspectionScript, request);
       } catch (error) {
         throw new Error(`BrowserOperatorTargetInspectionRequired: mutating action blocked because local target inspection failed (${error instanceof Error ? error.message : String(error)}).`);
       }
@@ -2608,6 +2486,144 @@ function formatStructured(value: unknown): string {
 
 function truncate(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}\n... (truncated)` : value;
+}
+
+export function executeDOMInspectionScript(input: {
+  selectorGroups: string[][];
+  intent: string;
+  useActiveElement: boolean;
+  allowIntentFallback: boolean;
+}) {
+  const bound = (value: unknown, max = 600) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const isInspectableTarget = (element: Element | null): element is Element => Boolean(
+    element && !['HTML', 'BODY', 'HEAD', 'SCRIPT', 'STYLE'].includes(element.tagName),
+  );
+  const targetText = (element: Element) => {
+    const html = element as HTMLElement;
+    return bound(html.innerText || element.textContent || '', 300);
+  };
+  const selectorFor = (element: Element): string => {
+    const escape = (value: string) => {
+      const css = (globalThis as typeof globalThis & { CSS?: { escape?: (input: string) => string } }).CSS;
+      return css?.escape ? css.escape(value) : value.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+    };
+    const id = element.getAttribute('id');
+    if (id) return `#${escape(id)}`;
+    for (const attribute of ['data-testid', 'data-test-id', 'data-test']) {
+      const value = element.getAttribute(attribute);
+      if (value) return `[${attribute}="${value.replace(/"/g, '\\"')}"]`;
+    }
+    const name = element.getAttribute('name');
+    if (name) return `${element.tagName.toLowerCase()}[name="${name.replace(/"/g, '\\"')}"]`;
+    const aria = element.getAttribute('aria-label');
+    if (aria) return `${element.tagName.toLowerCase()}[aria-label="${aria.replace(/"/g, '\\"')}"]`;
+    const parent = element.parentElement;
+    if (!parent) return element.tagName.toLowerCase();
+    const peers = Array.from(parent.children).filter((candidate) => candidate.tagName === element.tagName);
+    return `${selectorFor(parent)} > ${element.tagName.toLowerCase()}:nth-of-type(${Math.max(1, peers.indexOf(element) + 1)})`;
+  };
+  const labelsFor = (element: Element): string => {
+    const labels: string[] = [];
+    const control = element as HTMLInputElement;
+    if (control.labels) {
+      labels.push(...Array.from(control.labels).map((label) => targetText(label)));
+    }
+    const wrappingLabel = element.closest('label');
+    if (wrappingLabel) labels.push(targetText(wrappingLabel));
+    const labelledBy = element.getAttribute('aria-labelledby') || '';
+    for (const id of labelledBy.split(/\s+/).filter(Boolean)) {
+      const label = document.getElementById(id);
+      if (label) labels.push(targetText(label));
+    }
+    return bound([...new Set(labels.filter(Boolean))].join(' | '), 500);
+  };
+  const describe = (element: Element): BrowserOperatorTargetContext => {
+    const html = element as HTMLElement;
+    const form = element.closest('form') as HTMLFormElement | null;
+    const neighborhoodRoot = element.closest('[role="dialog"],dialog,form,fieldset,section,article,li')
+      || element.parentElement;
+    return {
+      text: targetText(element),
+      ariaLabel: bound(element.getAttribute('aria-label'), 300),
+      labels: labelsFor(element),
+      neighborhood: bound((neighborhoodRoot as HTMLElement | null)?.innerText || neighborhoodRoot?.textContent, 800),
+      formAction: bound(form?.getAttribute('action') || form?.action, 500),
+      formText: bound(form?.innerText || form?.textContent, 800),
+      role: bound(element.getAttribute('role') || html.tagName, 80),
+      inputType: bound(element.getAttribute('type'), 80),
+      name: bound(element.getAttribute('name') || element.id, 200),
+      href: bound(element.getAttribute('href') || (element as HTMLAnchorElement).href, 500),
+    };
+  };
+  const candidates = () => Array.from(document.querySelectorAll(
+    'button,a[href],input,textarea,select,[role="button"],[role="menuitem"],[contenteditable="true"]',
+  )).filter(isInspectableTarget);
+  const findByIntent = (intent: string): Element | null => {
+    const normalized = bound(intent, 500).toLowerCase();
+    const stopwords = [
+      'clique', 'cliquer', 'sur', 'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'dans', 'pour',
+      'remplis', 'remplir', 'champ', 'bouton', 'lien', 'texte', 'saisis', 'saisir',
+      'click', 'on', 'the', 'a', 'an', 'and', 'or', 'fill', 'input', 'field', 'button', 'link', 'type'
+    ];
+    const rawTokens = normalized.split(/[^\p{L}\p{N}]+/u).filter((token) => token.length > 1);
+    const semanticTokens = rawTokens.filter((token) => !stopwords.includes(token) && token.length > 2);
+    const searchTokens = semanticTokens.length > 0 ? semanticTokens : rawTokens;
+    const coreIntent = searchTokens.join(' ');
+
+    let best: { element: Element; score: number } | null = null;
+    for (const element of candidates()) {
+      const context = describe(element);
+      const placeholder = element.getAttribute('placeholder') || '';
+      const title = element.getAttribute('title') || '';
+      const haystack = `${context.text} ${context.ariaLabel} ${context.labels} ${context.name} ${context.role} ${placeholder} ${title}`.toLowerCase();
+
+      const exactMatchBonus = (coreIntent && haystack.includes(coreIntent)) ? 20 : 0;
+      const tokenScore = searchTokens.filter((token) => haystack.includes(token)).length * 3;
+      const score = exactMatchBonus + tokenScore;
+
+      if (score > 0 && (!best || score > best.score)) best = { element, score };
+    }
+    return best?.element ?? null;
+  };
+
+  try {
+    const targets: Element[] = [];
+    for (const group of input.selectorGroups) {
+      const target = group.map((selector) => document.querySelector(selector)).find(isInspectableTarget) ?? null;
+      if (target) targets.push(target);
+    }
+    if (input.useActiveElement && isInspectableTarget(document.activeElement)) {
+      targets.push(document.activeElement);
+    }
+    if (
+      targets.length === 0
+      && (input.selectorGroups.length === 0 || input.allowIntentFallback && input.selectorGroups.length === 1)
+      && input.intent
+    ) {
+      const intentTarget = findByIntent(input.intent);
+      if (intentTarget) targets.push(intentTarget);
+    }
+    const expectedTargets = input.selectorGroups.length > 0 ? input.selectorGroups.length : 1;
+    const uniqueTargets = [...new Set(targets)];
+    return {
+      inspected: true as const,
+      targetFound: uniqueTargets.length >= expectedTargets,
+      url: bound(location.href, 1_000),
+      documentTitle: bound(document.title, 300),
+      contexts: uniqueTargets.slice(0, 12).map(describe),
+      resolvedSelectors: uniqueTargets.slice(0, 12).map(selectorFor),
+    };
+  } catch (error) {
+    return {
+      inspected: true as const,
+      targetFound: false,
+      url: bound(location.href, 1_000),
+      documentTitle: bound(document.title, 300),
+      contexts: [],
+      resolvedSelectors: [],
+      error: error instanceof Error ? bound(error.message, 300) : 'target inspection failed',
+    };
+  }
 }
 
 const SAFE_SESSION_ID = /^[a-zA-Z0-9._-]{1,128}$/;

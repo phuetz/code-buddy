@@ -32,6 +32,7 @@
  *   directory `src/agent/multi-agent/agents/`.
  */
 
+import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 import { CommandHandlerResult } from './branch-handlers.js';
 import { logger } from '../../utils/logger.js';
 import type {
@@ -131,7 +132,7 @@ export function _resolveAgentsCredentials(): { apiKey: string; baseURL?: string 
     const resolved = resolveProviderFromCatalog({ providerOverride: 'ollama' });
     return {
       apiKey: resolved?.apiKey || 'ollama',
-      baseURL: resolved?.baseURL || 'http://localhost:11434/v1',
+      baseURL: resolved?.baseURL || getOllamaV1BaseUrl(),
     };
   }
   return {

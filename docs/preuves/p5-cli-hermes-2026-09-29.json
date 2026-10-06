@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-hermes",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T12:06:27.530Z",
+  "revision": "82a7cb9bcb59d02537e97cf41147cd3e1c5a8569",
+  "sourceDigest": "6f0a915257da28b2ceaad3f5ce6e5f93009ca59d17c96a6c972073a8ea36c13e",
+  "artifact": "docs/preuves/p5-cli-hermes-2026-09-29.log",
+  "summary": "Aperçu Hermes lu depuis la CLI réelle avec Ollama local."
+}

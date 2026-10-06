@@ -48,7 +48,7 @@ describe('isOllamaEndpoint', () => {
   it('is true when CODEBUDDY_PROVIDER=ollama, including a non-11434 port', () => {
     const env = { CODEBUDDY_PROVIDER: 'ollama' };
     expect(isOllamaEndpoint('http://127.0.0.1:11435/v1', env)).toBe(true);
-    expect(isOllamaEndpoint('http://localhost:11434/v1', env)).toBe(true);
+    expect(isOllamaEndpoint('http://127.0.0.1:11434/v1', env)).toBe(true);
   });
 
   it('matches the origin of OLLAMA_HOST regardless of /v1 suffix', () => {
@@ -71,8 +71,8 @@ describe('isOllamaEndpoint', () => {
   });
 
   it('treats :11434 on loopback as Ollama by default', () => {
-    expect(isOllamaEndpoint('http://localhost:11434/v1', {})).toBe(true);
-    expect(isOllamaEndpoint('http://localhost:11434/v1', { CODEBUDDY_PROVIDER: 'lmstudio' })).toBe(false);
+    expect(isOllamaEndpoint('http://127.0.0.1:11434/v1', {})).toBe(true);
+    expect(isOllamaEndpoint('http://127.0.0.1:11434/v1', { CODEBUDDY_PROVIDER: 'lmstudio' })).toBe(false);
   });
 });
 
@@ -156,9 +156,9 @@ describe('isOllamaNativeChatEnabled', () => {
 
 describe('ollamaNativeChatUrl', () => {
   it('replaces the OpenAI-compat suffix with the native path', () => {
-    expect(ollamaNativeChatUrl('http://localhost:11434/v1')).toBe('http://localhost:11434/api/chat');
-    expect(ollamaNativeChatUrl('http://localhost:11434/v1/')).toBe('http://localhost:11434/api/chat');
-    expect(ollamaNativeChatUrl('http://localhost:11434')).toBe('http://localhost:11434/api/chat');
+    expect(ollamaNativeChatUrl('http://127.0.0.1:11434/v1')).toBe('http://127.0.0.1:11434/api/chat');
+    expect(ollamaNativeChatUrl('http://127.0.0.1:11434/v1/')).toBe('http://127.0.0.1:11434/api/chat');
+    expect(ollamaNativeChatUrl('http://127.0.0.1:11434')).toBe('http://127.0.0.1:11434/api/chat');
   });
 });
 

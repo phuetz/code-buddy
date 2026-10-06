@@ -33,6 +33,7 @@ import { hasCodexCredentials, getCodexAuthFilePath } from '../providers/codex-oa
 import { commandExists } from '../utils/command-exists.js';
 import { getSettingsManager } from '../utils/settings-manager.js';
 import { checkCameraAvailability } from './camera.js';
+import { getCodeBuddyPath } from '../utils/codebuddy-home.js';
 import {
   getCompanionPerceptStats,
   recordCompanionPercept,
@@ -590,7 +591,7 @@ function resolveDetectedPiperVoice(): string {
   const roots = [
     path.join(os.homedir(), 'DEV', 'ai-stack', 'voice'),
     path.join(os.homedir(), 'ai-stack', 'voice'),
-    path.join(os.homedir(), '.codebuddy', 'voice'),
+    getCodeBuddyPath('voice'),
   ];
   const names = [
     'fr_FR-siwis-medium.onnx',

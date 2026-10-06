@@ -23,6 +23,7 @@
  * A leftover ChatGPT id must never be sent to Ollama.
  */
 
+import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -77,7 +78,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   ollama: {
     id: 'ollama',
     defaultModel: 'qwen2.5-coder:7b',
-    defaultBaseUrl: 'http://localhost:11434/v1',
+    defaultBaseUrl: getOllamaV1BaseUrl(),
     isLocal: true,
     resolve: (explicit = false) => {
       const host = process.env.OLLAMA_HOST;
@@ -132,7 +133,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   'gemini-cli': {
     id: 'gemini-cli',
     // Pinned to 3.1 explicitly so a fleet behavior shift only happens
-    // when Patrice updates this default (vs. the `gemini-3-pro-preview`
+    // when the owner updates this default (vs. the `gemini-3-pro-preview`
     // alias, which Google can auto-route to 3.2/3.3 etc.). Override
     // via CODEBUDDY_PEER_MODEL — works for both the alias and any
     // dotted version the binary accepts.
@@ -256,7 +257,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
 
 /** Detection priority: local/subscription first to spare cloud quotas.
  *
- * `chatgpt-oauth` sits above paid API keys so Patrice's ChatGPT plan is
+ * `chatgpt-oauth` sits above paid API keys so the configured ChatGPT plan is
  * used before metered providers.
  *
  * `gemini-cli` sits above `gemini` (API key) so a user with both will

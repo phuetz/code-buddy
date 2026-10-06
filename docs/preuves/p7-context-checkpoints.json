@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "context-checkpoints",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "5704213b282e59c802098d05b6b6795a069c30845ff6240ced68a3c17ad65266",
+  "artifact": "docs/preuves/p7-context-checkpoints.log",
+  "summary": "Code 0 ; 1 fichier capturé ; rewind.success=true ; contenu final « before »."
+}

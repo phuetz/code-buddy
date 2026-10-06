@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-cron",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T14:05:37Z",
+  "revision": "72c9ed8591b0851a404952435f0f9961185f6445",
+  "sourceDigest": "d12f979e70bc927d1cb9dc98140a4311150b907e6f49e9e7f26371a74410e310",
+  "artifact": "docs/preuves/p7-cli-cron.log",
+  "summary": "Codes 0/0/0 ; « Cron job created » ; liste contenant p7-fixture ; « Cron job removed »."
+}

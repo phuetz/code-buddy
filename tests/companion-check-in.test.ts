@@ -35,7 +35,7 @@ function brief(overrides: Record<string, unknown> = {}) {
     timestamp: '2026-05-24T10:00:00.000Z',
     cwd: '/repo',
     summary: 'Buddy has 1 companion impulse(s): 1 high, 0 medium.',
-    nextPrompt: 'Patrice, my next useful move is: refresh visual context.',
+    nextPrompt: 'Alex, my next useful move is: refresh visual context.',
     impulses: [
       {
         id: 'sense-refresh-visual-context',
@@ -60,6 +60,7 @@ function brief(overrides: Record<string, unknown> = {}) {
 
 describe('companion check-in', () => {
   beforeEach(() => {
+    vi.stubEnv('CODEBUDDY_USER_NAME', 'Alex');
     jest.clearAllMocks();
     mocks.buildCompanionImpulseBrief.mockResolvedValue(brief());
     mocks.readRecentCompanionPercepts.mockResolvedValue([
@@ -89,6 +90,8 @@ describe('companion check-in', () => {
     mocks.recordCompanionSafetyEvent.mockResolvedValue({ id: 'safety-1' });
   });
 
+  afterEach(() => vi.unstubAllEnvs());
+
   it('builds a proactive spoken cue from the top companion impulse', async () => {
     const cue = await buildCompanionCheckIn({
       cwd: '/repo',
@@ -102,7 +105,7 @@ describe('companion check-in', () => {
       suggestedCommand: 'buddy companion camera snapshot',
       sourceImpulseId: 'sense-refresh-visual-context',
     });
-    expect(cue.spokenText).toContain('Patrice, point rapide');
+    expect(cue.spokenText).toContain('Alex, point rapide');
     expect(cue.evidence.map(item => item.label)).toEqual(expect.arrayContaining([
       'latest vision',
       'latest hearing',

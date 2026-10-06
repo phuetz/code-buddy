@@ -86,7 +86,7 @@ describe('provider-onboarding validation lib', () => {
 
     it('uses the Ollama tags endpoint for the local free path', () => {
       const ollama = getProviderConfig('ollama');
-      expect(ollama?.baseUrl).toBe('http://localhost:11434');
+      expect(ollama?.baseUrl).toBe('http://127.0.0.1:11434');
       expect(ollama?.validateEndpoint).toBe('/api/tags');
     });
   });

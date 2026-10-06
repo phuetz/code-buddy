@@ -1,5 +1,5 @@
 /**
- * User name resolution — the single source of truth for the user's first name.
+ * User name resolution — the single source of truth for the user's form of address.
  *
  * The companion (Lisa) addresses the user by name in prompts, spoken lines, and
  * guidance. That name must NOT be hardcoded: it is configurable via
@@ -10,11 +10,11 @@
  * @module companion/user-name
  */
 
-/** Default when unconfigured — kept for backward compatibility on this machine. */
-export const DEFAULT_USER_NAME = 'Patrice';
+/** Neutral default when no name is configured. */
+export const DEFAULT_USER_NAME = 'l’utilisateur';
 
 /**
- * The user's first name: `CODEBUDDY_USER_NAME` when set, else the default. Pure
+ * The user's configured name when set, else a neutral form of address. Pure
  * (env injectable for tests). Never returns an empty string.
  */
 export function resolveUserName(env: NodeJS.ProcessEnv = process.env): string {

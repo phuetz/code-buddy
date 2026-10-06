@@ -10,6 +10,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { DEFAULT_SESSION_COST_USD, DEFAULT_YOLO_SESSION_COST_USD, YOLO_SESSION_COST_HARD_CAP_USD } from './session-cost-defaults.js';
+
 import { getRequestedProfile } from '../cli/requested-profile.js';
 import { getConfigManager, parseTOML, resolveProfileEntry, resolveUserConfigFile } from './toml-config.js';
 
@@ -18,11 +20,11 @@ export const HISTORICAL_MAX_TOOL_ROUNDS = 50;
 /** Tours d'outils en YOLO, quand rien n'est écrit. */
 export const HISTORICAL_YOLO_MAX_TOOL_ROUNDS = 400;
 /** Plafond de coût hors YOLO, en dollars. */
-export const HISTORICAL_SESSION_COST_USD = 10;
+export const HISTORICAL_SESSION_COST_USD = DEFAULT_SESSION_COST_USD;
 /** Plafond de coût en YOLO, en dollars. */
-export const HISTORICAL_YOLO_SESSION_COST_USD = 100;
+export const HISTORICAL_YOLO_SESSION_COST_USD = DEFAULT_YOLO_SESSION_COST_USD;
 /** Plafond dur déjà appliqué au coût YOLO : 100 × 10. */
-export const YOLO_SESSION_COST_HARD_CAP_USD = 1000;
+export { YOLO_SESSION_COST_HARD_CAP_USD };
 /** Seuil d'avertissement des tours, fraction du plafond. */
 export const HISTORICAL_TURN_WARNING_RATIO = 0.8;
 /** Seuil d'avertissement du coût, fraction du plafond. */

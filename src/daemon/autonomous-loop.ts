@@ -4,7 +4,7 @@
  *
  * One `tick()`:
  *   1. advertise presence (active),
- *   2. pick the next auto-claimable task (never `critical` — that needs Patrice),
+ *   2. pick the next auto-claimable task (never `critical` — that needs the operator),
  *   3. claim it,
  *   4. choose the model tier (LOCAL/$0 by default; escalate only on policy),
  *   5. run the injected executor,

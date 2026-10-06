@@ -15,7 +15,7 @@ describe('buddy ruche JSON CLI', () => {
   let profile: string;
 
   beforeEach(() => {
-    profile = fs.mkdtempSync(path.join(os.tmpdir(), 'ruche-cli-'));
+    profile = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'ruche-cli-')));
     const arbiter = generateKeyPairSync('ed25519');
     vi.stubEnv('CODEBUDDY_HOME', profile);
     vi.stubEnv('CODEBUDDY_RUCHE', 'true');

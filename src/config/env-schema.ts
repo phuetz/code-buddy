@@ -5,6 +5,7 @@
  * Provides validation, documentation, and a CLI summary.
  */
 
+import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import {
   getDirectRuntimeProviderCatalog,
@@ -481,7 +482,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'OLLAMA_HOST',
     type: 'string',
-    default: 'http://localhost:11434',
+    default: getOllamaBaseUrl(),
     description: 'Ollama host; normalized to /v1 for OpenAI-compatible calls',
     category: 'provider',
   },
@@ -1750,8 +1751,8 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'HOST',
     type: 'string',
-    default: '0.0.0.0',
-    description: 'HTTP server listen address',
+    default: '127.0.0.1',
+    description: 'HTTP server listen address (loopback by default; 0.0.0.0 exposes the server and requires JWT_SECRET)',
     category: 'server',
   },
   {

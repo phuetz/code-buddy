@@ -1,3 +1,6 @@
+import { getModelPricing } from '../config/model-pricing.js';
+import { UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
+
 /**
  * Active-LLM registry — the set of providers/models the user is actually
  * authenticated to (and that are reachable), used to drive auto-failover and
@@ -58,24 +61,6 @@ export interface BuildActiveLlmRegistryOptions {
   env?: Record<string, string | undefined>;
   force?: boolean;
 }
-
-/** Rough input $/Mtok for ordering + display. 0 for local runtimes and
- * subscription-OAuth backends (no per-token metering). */
-const APPROX_COST_USD_PER_MTOK: Record<string, number> = {
-  chatgpt: 0,
-  'agy-cli': 0,
-  ollama: 0,
-  lemonade: 0,
-  lmstudio: 0,
-  omniroute: 0,
-  'gemini-cli': 0,
-  grok: 0.5,
-  gemini: 0.3,
-  groq: 0.3,
-  mistral: 1,
-  anthropic: 3,
-  openai: 5,
-};
 
 function canonicalProviderId(provider: string | undefined | null): string | undefined {
   if (!provider) return undefined;
@@ -168,7 +153,7 @@ function toActiveLlm(
     priority: entry?.priority ?? 500,
     costInputUsdPerMtok: isFreeOpenRouterModel
       ? 0
-      : APPROX_COST_USD_PER_MTOK[resolved.provider] ?? 1,
+      : isLocal || LOCAL_GATEWAY_PROVIDERS.has(resolved.provider) || resolved.authMode === 'oauth' ? 0 : getModelPricing(resolvedModel).inputPerMillion,
   };
 }
 
@@ -278,7 +263,7 @@ export async function buildActiveLlmRegistry(
       isLocal: false,
       reachable: true,
       priority: 900,
-      costInputUsdPerMtok: APPROX_COST_USD_PER_MTOK[f.provider] ?? 1,
+      costInputUsdPerMtok: f.model ? getModelPricing(f.model).inputPerMillion : UNKNOWN_MODEL_PRICE.inputPerMillion,
     });
   }
 

@@ -1,0 +1,88 @@
+Fonctionnalité : fleet-peer-tools
+Date : 2026-09-29
+Révision : be71d2dcfaf685e5d885d836bab4d1c73960871b
+Commande : peer.tool.invoke view_file sur pair WebSocket local ; essai ../outside.txt
+Attendu : Lecture autorisée, traversée du workspace refusée.
+Observé : FLEET_MARKER_731 lu ; PATH_OUTSIDE_PEER_WORKSPACE renvoyé ; serveur arrêté.
+Verdict : prouvée en situation
+
+Sortie capturée :
+--- fleet.out ---
+{
+  "fleetStatus": {
+    "status": "ok",
+    "connections": {
+      "total": 0,
+      "authenticated": 0,
+      "streaming": 0,
+      "totalBroadcastsDropped": 0
+    }
+  },
+  "toolRead": {
+    "tool": "view_file",
+    "output": "FLEET_MARKER_731\n",
+    "durationMs": 2,
+    "truncated": false
+  },
+  "toolDenied": {
+    "error": "peer.invoke METHOD_ERROR: PATH_OUTSIDE_PEER_WORKSPACE: ../outside.txt resolves to <WORKTREE>/_qa/preuves-p6/outside.txt, outside <WORKTREE>/_qa/preuves-p6/work"
+  },
+  "chat": {
+    "text": "FLEET_OK",
+    "modelRequested": "qwen3:4b-instruct",
+    "providerResolved": "ollama",
+    "finishReason": "stop",
+    "usage": {
+      "prompt_tokens": 32,
+      "completion_tokens": 5,
+      "total_tokens": 37
+    },
+    "traceId": "trace-mumn6ypt-6nijac"
+  },
+  "sessionStart": {
+    "sessionId": "sess_mumn6yzg_ay9xlm",
+    "expiresAt": 1790686092507,
+    "traceId": "trace-mumn6yzf-3wmaez"
+  },
+  "sessionContinue": {
+    "text": "OK",
+    "finishReason": "stop",
+    "usage": {
+      "prompt_tokens": 51,
+      "completion_tokens": 2,
+      "total_tokens": 53
+    },
+    "traceId": "trace-mumn6yzl-b07e2v",
+    "providerResolved": "ollama"
+  },
+  "sessionRecall": {
+    "text": "731",
+    "finishReason": "stop",
+    "usage": {
+      "prompt_tokens": 68,
+      "completion_tokens": 4,
+      "total_tokens": 72
+    },
+    "traceId": "trace-mumn6z8m-aeag1j",
+    "providerResolved": "ollama"
+  },
+  "sessionList": {
+    "count": 1,
+    "sessions": [
+      {
+        "sessionId": "sess_mumn6yzg_ay9xlm",
+        "turnCount": 2,
+        "model": "qwen3:4b-instruct",
+        "ageMs": 721,
+        "idleMs": 6,
+        "expiresInMs": 1799994
+      }
+    ],
+    "traceId": "trace-mumn6zjg-686tym"
+  },
+  "sessionEnd": {
+    "closed": true,
+    "traceId": "trace-mumn6zjh-ezskx8"
+  },
+  "serverStopped": true
+}
