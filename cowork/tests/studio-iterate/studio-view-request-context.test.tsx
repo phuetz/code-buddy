@@ -428,7 +428,7 @@ describe.skipIf(!hasGit())('StudioView — élément ciblé, journaux, image, co
     fireEvent.change(screen.getByLabelText('Iteration message'), { target: { value: 'Autre demande' } });
     await waitFor(() => expect((screen.getByLabelText('Iteration message') as HTMLTextAreaElement).disabled).toBe(false));
     fireEvent.click(screen.getByText('Send'));
-    expect((await screen.findByTestId('studio-chat-notice')).textContent).toContain('Envoi annulé');
+    expect((await screen.findByTestId('studio-chat-notice')).textContent).toContain('Send cancelled');
     expect(ipc.continueSession).toHaveBeenCalledTimes(1);
 
     // Onglet Secrets : noms seulement, jamais la valeur dans le DOM.

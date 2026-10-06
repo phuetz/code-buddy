@@ -1,5 +1,6 @@
 import { Code2, Eye, PanelBottom, Play, Plus, Download, Rocket, Github, X, History as HistoryIcon, Globe, FolderOpen, KeyRound, SquareTerminal, ScrollText } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { BuildStatusStrip, type BuildPhase } from './BuildStatusStrip.js';
 import { CodeEditorPane } from './CodeEditorPane.js';
@@ -163,6 +164,7 @@ export function AppStudioView({
   console: consolePane,
   onSecretsChange,
 }: AppStudioViewProps) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<MainTab>('editor');
   const [bottomTab, setBottomTab] = useState<'terminal' | 'console'>('terminal');
   const [seedPrompt, setSeedPrompt] = useState<string | undefined>(undefined);
@@ -179,11 +181,14 @@ export function AppStudioView({
     setSiteResult(null);
     try {
       const res = await window.electronAPI?.studio?.exportSite?.(workingDir);
-      if (!res) setSiteResult({ ok: false, text: 'Export du site indisponible.' });
+      if (!res) setSiteResult({ ok: false, text: t('studio.siteUnavailable', 'Site export unavailable.') });
       else if (res.ok) {
         setSiteResult({
           ok: true,
-          text: `Site ${res.data.kind === 'build' ? 'construit' : 'statique'} exporté (${res.data.files} fichiers) :`,
+          text:
+            res.data.kind === 'build'
+              ? t('studio.siteExportedBuild', { files: res.data.files, defaultValue: 'Built site exported ({{files}} files):' })
+              : t('studio.siteExportedStatic', { files: res.data.files, defaultValue: 'Static site exported ({{files}} files):' }),
           savedTo: res.data.savedTo,
         });
       } else if (!res.canceled) {
@@ -208,7 +213,7 @@ export function AppStudioView({
       const raw = await window.electronAPI?.studio?.github?.push?.({ root: workingDir });
       const res = raw as { ok?: boolean; data?: GithubPushOutcome; error?: string } | undefined;
       if (res?.ok && res.data) setGhResult(res.data);
-      else setGhResult({ mode: 'manual', log: res?.error ?? 'Push failed', instructions: [] });
+      else setGhResult({ mode: 'manual', log: res?.error ?? t('studio.pushFailed', 'Push failed'), instructions: [] });
     } catch (error) {
       setGhResult({ mode: 'manual', log: String(error), instructions: [] });
     } finally {
@@ -232,14 +237,17 @@ export function AppStudioView({
       />
       <section className="grid min-h-0 grid-rows-[minmax(0,1fr)_220px] gap-2">
         <div className="flex min-h-0 flex-col border border-border bg-surface">
-          <div className="flex h-10 shrink-0 items-center border-b border-border bg-muted px-2">
+          <div
+            className="flex h-10 shrink-0 items-center border-b border-border bg-muted px-2"
+            data-testid="studio-toolbar"
+          >
             <button
               type="button"
               onClick={() => setTab('editor')}
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'editor' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
             >
               <Code2 className="h-4 w-4" aria-hidden="true" />
-              Editor
+              {t('studio.tabs.editor', 'Editor')}
             </button>
             <button
               type="button"
@@ -247,7 +255,7 @@ export function AppStudioView({
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs ${tab === 'preview' ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
             >
               <Eye className="h-4 w-4" aria-hidden="true" />
-              Preview
+              {t('studio.tabs.preview', 'Preview')}
             </button>
             <button
               type="button"
@@ -256,7 +264,7 @@ export function AppStudioView({
               data-testid="studio-tab-versions"
             >
               <HistoryIcon className="h-4 w-4" aria-hidden="true" />
-              Versions
+              {t('studio.tabs.versions', 'Versions')}
             </button>
             <button
               type="button"
@@ -265,7 +273,7 @@ export function AppStudioView({
               data-testid="studio-tab-secrets"
             >
               <KeyRound className="h-4 w-4" aria-hidden="true" />
-              Secrets
+              {t('studio.tabs.secrets', 'Secrets')}
             </button>
             <button
               type="button"
@@ -277,30 +285,30 @@ export function AppStudioView({
               className="ml-auto inline-flex h-8 items-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" aria-hidden="true" />
-              Run
+              {t('studio.run', 'Run')}
             </button>
             <button
               type="button"
               onClick={() => {
                 if (workingDir) void window.electronAPI?.studio?.exportZip?.(workingDir);
               }}
-              title="Export the project as a zip"
+              title={t('studio.exportTitle', 'Export the project as a zip')}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-export-zip"
             >
               <Download className="h-4 w-4" aria-hidden="true" />
-              Export
+              {t('studio.export', 'Export')}
             </button>
             <button
               type="button"
               onClick={() => void onExportSite()}
               disabled={siteBusy || !workingDir}
-              title="Construire le site et l'exporter dans un dossier (prêt pour un hébergement statique)"
+              title={t('studio.siteTitle', 'Build the site and export it to a folder (ready for static hosting)')}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="studio-export-site"
             >
               <Globe className="h-4 w-4" aria-hidden="true" />
-              {siteBusy ? 'Construction…' : 'Site'}
+              {siteBusy ? t('studio.siteBuilding', 'Building…') : t('studio.site', 'Site')}
             </button>
             <button
               type="button"
@@ -309,23 +317,23 @@ export function AppStudioView({
                 store.setOneClickDeployRoot(workingDir ?? null);
                 store.setShowOneClickDeploy(true);
               }}
-              title="Déployer (simulation Cloudflare Pages / Netlify)"
+              title={t('studio.deployTitle', 'Deploy (Cloudflare Pages / Netlify simulation)')}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
               data-testid="studio-deploy"
             >
               <Rocket className="h-4 w-4" aria-hidden="true" />
-              Déployer
+              {t('studio.deploy', 'Deploy')}
             </button>
             <button
               type="button"
               onClick={onPushGithub}
               disabled={ghBusy || !workingDir}
-              title="Create a GitHub repository and push this project"
+              title={t('studio.githubTitle', 'Create a GitHub repository and push this project')}
               className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="studio-github-push"
             >
               <Github className="h-4 w-4" aria-hidden="true" />
-              {ghBusy ? 'Pushing…' : 'GitHub'}
+              {ghBusy ? t('studio.githubPushing', 'Pushing…') : t('studio.github', 'GitHub')}
             </button>
           </div>
           {siteResult ? (
@@ -356,7 +364,7 @@ export function AppStudioView({
               <button
                 type="button"
                 onClick={() => setSiteResult(null)}
-                title="Fermer"
+                title={t('studio.close', 'Close')}
                 className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -372,7 +380,7 @@ export function AppStudioView({
               <div className="min-w-0 flex-1">
                 {ghResult.mode === 'pushed' ? (
                   <div className="text-foreground">
-                    Pushed to GitHub.{' '}
+                    {t('studio.pushed', 'Pushed to GitHub.')}{' '}
                     {ghResult.url ? (
                       <a
                         href={ghResult.url}
@@ -385,12 +393,12 @@ export function AppStudioView({
                         {ghResult.url}
                       </a>
                     ) : (
-                      'Repository created.'
+                      t('studio.repoCreated', 'Repository created.')
                     )}
                   </div>
                 ) : (
                   <div className="text-foreground">
-                    <div className="font-medium">Finish the push manually:</div>
+                    <div className="font-medium">{t('studio.finishManually', 'Finish the push manually:')}</div>
                     {ghResult.instructions && ghResult.instructions.length > 0 ? (
                       <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-background p-2 font-mono text-[11px] text-muted-foreground">
                         {ghResult.instructions.join('\n')}
@@ -404,7 +412,7 @@ export function AppStudioView({
               <button
                 type="button"
                 onClick={() => setGhResult(null)}
-                title="Dismiss"
+                title={t('studio.dismiss', 'Dismiss')}
                 className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -427,7 +435,7 @@ export function AppStudioView({
                     <CodeEditorPane path={activeFile} value={fileContent} onChange={onChangeFileContent} onSave={onSaveFile} />
                   ) : (
                     <div className="flex h-full items-center justify-center p-6 text-center text-xs text-muted-foreground">
-                      No file selected.
+                      {t('studio.noFile', 'No file selected.')}
                     </div>
                   )}
                 </div>
@@ -464,7 +472,7 @@ export function AppStudioView({
         </div>
         {consolePane ? (
           <div className="flex min-h-0 flex-col">
-            <div className="flex shrink-0 gap-1 pb-1 text-xs" role="tablist" aria-label="Panneau du bas">
+            <div className="flex shrink-0 gap-1 pb-1 text-xs" role="tablist" aria-label={t('studio.bottomPanel', 'Bottom panel')}>
               <button
                 type="button"
                 role="tab"
@@ -473,7 +481,7 @@ export function AppStudioView({
                 className={`inline-flex items-center gap-1 rounded px-2 py-0.5 ${bottomTab === 'terminal' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 <SquareTerminal className="h-3.5 w-3.5" aria-hidden="true" />
-                Terminal
+                {t('studio.terminal', 'Terminal')}
               </button>
               <button
                 type="button"
@@ -484,8 +492,8 @@ export function AppStudioView({
                 className={`inline-flex items-center gap-1 rounded px-2 py-0.5 ${bottomTab === 'console' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
-                Console
-                {consolePane.browser.some((e) => e.level === 'error') ? <span className="h-1.5 w-1.5 rounded-full bg-red-500" aria-label="erreurs" /> : null}
+                {t('studio.console', 'Console')}
+                {consolePane.browser.some((e) => e.level === 'error') ? <span className="h-1.5 w-1.5 rounded-full bg-red-500" aria-label={t('studio.consoleErrors', 'errors')} /> : null}
               </button>
             </div>
             <div className="min-h-0 flex-1">
@@ -514,10 +522,11 @@ export function AppStudioView({
               type="button"
               onClick={onNewApp}
               className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="Start a new app"
+              title={t('studio.newAppTitle', 'Start a new app')}
+              data-testid="studio-new-app"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              New app
+              {t('studio.newApp', 'New app')}
             </button>
           </div>
         ) : null}
@@ -557,7 +566,7 @@ export function AppStudioView({
             workbench
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-center text-xs text-muted-foreground">
-              Your app's files, code, and preview will appear here during generation.
+              {t('studio.filesPlaceholder', "Your app's files, code, and preview will appear here during generation.")}
             </div>
           )}
         </div>
@@ -573,9 +582,12 @@ export function AppStudioView({
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
           <div className="mx-auto max-w-3xl text-center">
             <PanelBottom className="mx-auto h-8 w-8 text-muted-foreground" aria-hidden="true" />
-            <h2 className="mt-3 text-sm font-medium text-foreground">What would you like to create?</h2>
+            <h2 className="mt-3 text-sm font-medium text-foreground">{t('studio.emptyTitle', 'What would you like to create?')}</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Pick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here.
+              {t(
+                'studio.emptyHint',
+                'Pick a type below (preview of what will be created) or describe your app above — the files, code, and preview will appear here.'
+              )}
             </p>
           </div>
           <div className="mx-auto mt-5 w-full max-w-4xl">
@@ -589,7 +601,7 @@ export function AppStudioView({
                   setSeedPrompt(richPrompt);
                   return;
                 }
-                const item = DEFAULT_TEMPLATES.find((t) => t.id === id);
+                const item = DEFAULT_TEMPLATES.find((template) => template.id === id);
                 if (item) setSeedPrompt(`${item.name} — ${item.tagline}`);
               }}
             />

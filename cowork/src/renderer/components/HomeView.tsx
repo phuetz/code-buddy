@@ -10,6 +10,7 @@
  * surface; recent sessions resume.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Clapperboard, FileText, FolderOpen, Hammer, Image as ImageIcon, Presentation, Radio, Search, Table2 } from 'lucide-react';
 import { useAppStore } from '../store';
 import { useIPC } from '../hooks/useIPC';
@@ -19,8 +20,10 @@ import type { Session } from '../types';
 import { LivingBriefing } from './LivingBriefing';
 import { MaisonHomeCard } from './home/MaisonHomeCard';
 import { ScreenHelpButton } from './ScreenHelpButton';
+import { isSubmitEnter } from '../utils/submit-key';
 
 interface QuickAction {
+  id: string;
   label: string;
   hint: string;
   run: () => void;
@@ -28,6 +31,9 @@ interface QuickAction {
 
 /** Genspark-style agent tiles: each studio is ONE click from Home. */
 interface StudioTile {
+  /** Clé i18n `homeView.tiles.<id>`. */
+  id: string;
+  /** Libellé anglais par défaut. */
   label: string;
   icon: typeof Presentation;
   /** `seed` = the Home composer's current text, carried into the studio. */
@@ -35,15 +41,15 @@ interface StudioTile {
 }
 
 const STUDIO_TILES: StudioTile[] = [
-  { label: 'App', icon: Hammer, run: (s) => s.setPrimaryView('studio') },
-  { label: 'Deck', icon: Presentation, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('deck'); s.setPrimaryView('creations'); } },
-  { label: 'Sheet', icon: Table2, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('sheet'); s.setPrimaryView('creations'); } },
-  { label: 'Document', icon: FileText, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('doc'); s.setPrimaryView('creations'); } },
-  { label: 'Pod', icon: Radio, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('pod'); s.setPrimaryView('creations'); } },
-  { label: 'Image', icon: ImageIcon, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('image'); s.setPrimaryView('creations'); } },
-  { label: 'Video', icon: Clapperboard, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('video'); s.setPrimaryView('creations'); } },
-  { label: 'Drive', icon: FolderOpen, run: (s) => { s.setCreationsTab('drive'); s.setPrimaryView('creations'); } },
-  { label: 'Search', icon: Search, run: (s) => s.setShowLiveLauncher(true) },
+  { id: 'app', label: 'App', icon: Hammer, run: (s) => s.setPrimaryView('studio') },
+  { id: 'deck', label: 'Deck', icon: Presentation, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('deck'); s.setPrimaryView('creations'); } },
+  { id: 'sheet', label: 'Sheet', icon: Table2, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('sheet'); s.setPrimaryView('creations'); } },
+  { id: 'document', label: 'Document', icon: FileText, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('doc'); s.setPrimaryView('creations'); } },
+  { id: 'pod', label: 'Pod', icon: Radio, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('pod'); s.setPrimaryView('creations'); } },
+  { id: 'image', label: 'Image', icon: ImageIcon, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('image'); s.setPrimaryView('creations'); } },
+  { id: 'video', label: 'Video', icon: Clapperboard, run: (s, seed) => { s.setCreationsSeed(seed); s.setCreationsTab('video'); s.setPrimaryView('creations'); } },
+  { id: 'drive', label: 'Drive', icon: FolderOpen, run: (s) => { s.setCreationsTab('drive'); s.setPrimaryView('creations'); } },
+  { id: 'search', label: 'Search', icon: Search, run: (s) => s.setShowLiveLauncher(true) },
 ];
 
 function RecentSessions({
@@ -53,11 +59,12 @@ function RecentSessions({
   sessions: Session[];
   onOpen: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   if (sessions.length === 0) return null;
   return (
     <div className="w-full max-w-xl" data-testid="home-recents">
       <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
-        Sessions récentes
+        {t('homeView.recentSessions', 'Recent sessions')}
       </div>
       <div className="flex flex-col gap-1">
         {sessions.map((s) => (
@@ -67,7 +74,7 @@ function RecentSessions({
             onClick={() => onOpen(s.id)}
             className="text-left rounded-md border border-border bg-background hover:bg-accent transition-colors px-3 py-2"
           >
-            <div className="text-sm font-medium truncate">{s.title || 'Sans titre'}</div>
+            <div className="text-sm font-medium truncate">{s.title || t('homeView.untitled', 'Untitled')}</div>
             {s.cwd && (
               <div className="text-xs text-muted-foreground truncate">{s.cwd}</div>
             )}
@@ -79,6 +86,7 @@ function RecentSessions({
 }
 
 export function HomeView() {
+  const { t } = useTranslation();
   const sessions = useAppStore((s) => s.sessions);
   const setActiveSession = useAppStore((s) => s.setActiveSession);
   const setPrimaryView = useAppStore((s) => s.setPrimaryView);
@@ -130,7 +138,7 @@ export function HomeView() {
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (isSubmitEnter(e)) {
       e.preventDefault();
       void send();
     }
@@ -148,14 +156,40 @@ export function HomeView() {
     .slice(0, 5);
 
   const quick: QuickAction[] = [
-    { label: 'Code / fix', hint: 'Describe the bug or the feature', run: () => prefill('') },
-    { label: 'Search', hint: 'Wide research + planning flow', run: () => setShowLiveLauncher(true) },
-    { label: 'Create a document', hint: 'Excel, Word, PDF, charts', run: () => setShowSkillsManager(true) },
+    {
+      id: 'code',
+      label: t('homeView.quick.code.label', 'Code / fix'),
+      hint: t('homeView.quick.code.hint', 'Describe the bug or the feature'),
+      run: () => prefill(''),
+    },
+    {
+      id: 'search',
+      label: t('homeView.quick.search.label', 'Search'),
+      hint: t('homeView.quick.search.hint', 'Wide research + planning flow'),
+      run: () => setShowLiveLauncher(true),
+    },
+    {
+      id: 'document',
+      label: t('homeView.quick.document.label', 'Create a document'),
+      hint: t('homeView.quick.document.hint', 'Excel, Word, PDF, charts'),
+      run: () => setShowSkillsManager(true),
+    },
   ];
 
   // A rotating handful of ready-to-run missions (Genspark recipes) — clicking
   // one drops its prompt into the input so the user only fills the <…> bits.
-  const missions = useMemo(() => AGENT_RECIPES.slice(0, 6), []);
+  // Le catalogue garde ses textes anglais par défaut ; l'accueil les affiche
+  // (et dépose l'invite) dans la langue de l'interface via `recipes.items.<id>`.
+  const missions = useMemo(
+    () =>
+      AGENT_RECIPES.slice(0, 6).map((r) => ({
+        ...r,
+        title: t(`recipes.items.${r.id}.title`, r.title),
+        description: t(`recipes.items.${r.id}.description`, r.description),
+        prompt: t(`recipes.items.${r.id}.prompt`, r.prompt),
+      })),
+    [t]
+  );
 
   return (
     <div
@@ -168,9 +202,9 @@ export function HomeView() {
       <LivingBriefing sessions={sessions} onOpenMissionControl={() => setPrimaryView('os')} />
 
       <div className="text-center">
-        <h1 className="text-2xl font-semibold">What would you like to do?</h1>
+        <h1 className="text-2xl font-semibold">{t('homeView.title', 'What would you like to do?')}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Tell Code Buddy — it codes, searches, and creates in your folder.
+          {t('homeView.subtitle', 'Tell Code Buddy — it codes, searches, and creates in your folder.')}
         </p>
       </div>
 
@@ -190,7 +224,9 @@ export function HomeView() {
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder="e.g. fix the login bug, or create a dashboard…"
+            placeholder={t('homeView.placeholder', 'e.g. fix the login bug, or create a dashboard…')}
+            aria-label={t('homeView.inputLabel', 'Your request')}
+            aria-describedby="home-input-hint"
             className="flex-1 resize-none bg-transparent px-2 py-1.5 text-sm focus:outline-none"
             data-testid="home-input"
           />
@@ -199,10 +235,15 @@ export function HomeView() {
             disabled={!prompt.trim() || submitting}
             className="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-background hover:bg-accent-hover disabled:opacity-40"
             data-testid="home-send"
+            aria-busy={submitting || undefined}
+            aria-label={submitting ? t('homeView.sending', 'Sending…') : undefined}
           >
-            {submitting ? '…' : 'Send'}
+            {submitting ? '…' : t('homeView.send', 'Send')}
           </button>
         </div>
+        <p id="home-input-hint" className="mt-1 px-2 text-xs text-muted-foreground" data-testid="home-key-hint">
+          {t('homeView.keyHint', 'Enter to send · Shift+Enter for a new line')}
+        </p>
       </form>
 
       <MaisonHomeCard />
@@ -210,20 +251,20 @@ export function HomeView() {
       {/* Genspark-style agent row: every studio is one click away; the typed
           subject travels with the click (creationsSeed). */}
       <div className="w-full max-w-xl flex flex-wrap justify-center gap-2" data-testid="home-studios">
-        {STUDIO_TILES.map(({ label, icon: Icon, run }) => (
+        {STUDIO_TILES.map(({ id, label, icon: Icon, run }) => (
           <button
-            key={label}
+            key={id}
             type="button"
             onClick={() => run(useAppStore.getState(), prompt.trim() || null)}
             className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-background hover:border-accent hover:bg-accent/10 transition-colors px-4 py-3 min-w-[72px]"
           >
             <Icon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-            <span className="text-xs">{label}</span>
+            <span className="text-xs">{t(`homeView.tiles.${id}`, label)}</span>
           </button>
         ))}
         {prompt.trim() ? (
           <div className="w-full text-center text-xs text-muted-foreground">
-            Your topic will travel with the studio you pick.
+            {t('homeView.topicTravels', 'Your topic will travel with the studio you pick.')}
           </div>
         ) : null}
       </div>
@@ -231,7 +272,7 @@ export function HomeView() {
       <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="home-quick">
         {quick.map((a) => (
           <button
-            key={a.label}
+            key={a.id}
             type="button"
             onClick={a.run}
             className="text-left rounded-lg border border-border bg-background hover:bg-accent transition-colors p-3"
@@ -244,7 +285,9 @@ export function HomeView() {
 
       {/* Ready-to-run missions (agent-recipes catalogue, previously dormant). */}
       <div className="w-full max-w-xl" data-testid="home-missions">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Missions prêtes</div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">
+          {t('homeView.readyMissions', 'Ready-made missions')}
+        </div>
         <div className="flex flex-wrap gap-2">
           {missions.map((r) => (
             <button

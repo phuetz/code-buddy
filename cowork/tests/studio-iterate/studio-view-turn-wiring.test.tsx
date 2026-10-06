@@ -288,7 +288,7 @@ describe('AppStudioView — bouton « Site »', () => {
       />,
     );
     fireEvent.click(screen.getByTestId('studio-export-site'));
-    expect(await screen.findByText(/Site construit exporté \(3 fichiers\)/)).toBeTruthy();
+    expect(await screen.findByText(/Built site exported \(3 files\)/)).toBeTruthy();
     expect(exportSite).toHaveBeenCalledWith('/tmp/projet');
     fireEvent.click(screen.getByTestId('studio-site-open'));
     expect(showItemInFolder).toHaveBeenCalledWith('/tmp/exports/app-site');

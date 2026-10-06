@@ -1,5 +1,7 @@
 import { ImagePlus, Layers, LayoutGrid, Palette, Send, Sparkles, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { isSubmitEnter } from '../../utils/submit-key.js';
+import { useTranslation } from 'react-i18next';
 import { suggestTemplate, type StudioTemplateId } from './utils/studio-intent.js';
 import { designSystemsByCategory, findDesignSystem } from './design-systems-catalog.js';
 import { GENERATION_STACKS } from './generation-stacks.js';
@@ -69,6 +71,7 @@ function joinPath(base: string, child: string): string {
 }
 
 export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onPrompt, busy = false, workingDir = '', seedPrompt }: StudioComposerProps) {
+  const { t } = useTranslation();
   const [prompt, setPrompt] = useState('');
   const [template, setTemplate] = useState<StudioTemplateId>('react-tailwind');
   const [projectName, setProjectName] = useState('app-studio-project');
@@ -200,17 +203,25 @@ export function StudioComposer({ templates, onScaffold, onGenerateWithAI, onProm
             value={prompt}
             onChange={(event) => updatePrompt(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              // Même loi que l'accueil et le chat d'itération (E2).
+              if (isSubmitEnter(event)) {
                 event.preventDefault();
                 handleGenerate();
               }
             }}
             disabled={busy}
             rows={4}
-            placeholder="Describe the app to build — e.g. “a React todo app with filters, dark theme, and local persistence”. Ctrl/⌘+Enter to generate."
+            placeholder={t(
+              'studio.composerPlaceholder',
+              'Describe the app to build — e.g. “a React todo app with filters, dark theme, and local persistence”.'
+            )}
+            aria-describedby="studio-composer-key-hint"
             className="min-h-[104px] min-w-0 flex-1 resize-y bg-transparent py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
           />
         </div>
+        <p id="studio-composer-key-hint" className="-mt-2 px-1 text-xs text-muted-foreground" data-testid="studio-composer-key-hint">
+          {t('studioChat.keyHint', 'Enter to send · Shift+Enter for a new line')}
+        </p>
         {showEnhancer ? (
           <PromptEnhancer
             suggestions={enhancement.suggestions}
