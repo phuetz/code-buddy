@@ -2,18 +2,23 @@
  * Secret Scrubber
  *
  * Centralised, hot-path-safe redaction of secrets from any text that is about
- * to leave the process: logs, Sentry events, OTEL span attributes, breadcrumbs.
+ * to leave the process: logs, Sentry events, OTEL span attributes, breadcrumbs,
+ * audit JSONL, run journals, session exports, and `buddy run show` timelines.
  *
  * Design goals:
  * - ONE source of truth for known token shapes — reuses `SECRET_PATTERNS` from
- *   `secrets-detector.ts` (the static scanner) plus a handful of runtime-only
- *   formats (OpenAI/Anthropic `sk-…`, generic `Bearer …`, full PEM blocks,
- *   broader Slack tokens).
+ *   `secret-patterns.ts` (the static scanner) plus a handful of runtime-only
+ *   formats (OpenAI/Anthropic `sk-…`, xAI `xai-…`, generic `Bearer …`, full PEM
+ *   blocks, broader Slack tokens) and exact values of sensitive environment
+ *   variables (fail-closed for keys passed via env that may not match a shape).
  * - PERF: the logger is extremely hot, so a single fast `SENTINEL_RE.test()`
- *   short-circuits every string that carries no tell-tale secret prefix. On the
- *   overwhelmingly common secret-free line the cost is one regex test.
+ *   short-circuits every string that carries no tell-tale secret prefix AND no
+ *   remembered env secret. On the overwhelmingly common secret-free line the
+ *   cost is one regex test (+ a cheap env-fingerprint check).
  * - Idempotent: scrub(scrub(x)) === scrub(x). Placeholders carry no secret body.
- * - Never-throws: any regex/traversal error returns the original value.
+ * - Fail-closed: any regex/traversal error returns a redaction placeholder,
+ *   NEVER the original value (availability of the log line is worth less than
+ *   leaking a credential).
  * - Reference-preserving: a value with nothing to redact comes back byte- AND
  *   reference-identical, so structured logs / span attrs are untouched (no false
  *   positives, no needless allocation).
@@ -22,16 +27,26 @@
 import { SECRET_PATTERNS } from './secret-patterns.js';
 
 // ============================================================================
+// Fail-closed placeholder
+// ============================================================================
+
+const SCRUB_ERROR_PLACEHOLDER = '[REDACTED:scrub_error]';
+
+// ============================================================================
 // Fast-path sentinel
 // ============================================================================
 
 /**
- * Ultra-cheap pre-check. If none of these tell-tale prefixes appear, the string
- * cannot contain any secret we recognise, so we return immediately without
- * running the (comparatively expensive) pattern battery.
+ * Ultra-cheap pre-check. If none of these tell-tale prefixes appear AND no
+ * remembered env secret is present, the string cannot contain any secret we
+ * recognise, so we return immediately without running the pattern battery.
+ *
+ * MUST stay in sync with every prefix covered by SCRUB_PATTERNS / SECRET_PATTERNS
+ * self-identifying types — a missing prefix is a silent fail-open hole
+ * (historically: `xai-` leaked through logger + audit JSONL).
  */
 const SENTINEL_RE =
-  /sk-|sk_|xox|AKIA|ghp_|github_pat_|glpat-|AIza|-----BEGIN|Bearer |eyJ/;
+  /sk-|sk_|xai-|xox|AKIA|ghp_|github_pat_|glpat-|AIza|hf_|dop_v1_|SG\.|npm_|pypi-|sb_(?:secret|publishable)_|vc[piark]_|AccountKey=|-----BEGIN|Bearer |eyJ|(?:SK|AC)[0-9a-fA-F]{32}/;
 
 // ============================================================================
 // Scrub patterns
@@ -54,8 +69,10 @@ function globalize(re: RegExp): RegExp {
  * Self-identifying types from the static scanner that are safe to redact
  * globally at runtime (no context anchor, negligible false-positive rate).
  * Context-anchored types (aws_secret, password_in_code, connection_string,
- * generic_api_key) are intentionally excluded — they need a surrounding
- * assignment to be meaningful and would over-match in free-form log prose.
+ * generic_api_key, cloudflare_token) are intentionally excluded — they need a
+ * surrounding assignment to be meaningful and would over-match in free-form
+ * log prose. Those still get caught when their value is also present in a
+ * sensitive environment variable (see `getEnvSecretValues`).
  */
 const REUSED_PLACEHOLDER: Record<string, string> = {
   aws_key: '[REDACTED:aws_key]',
@@ -66,6 +83,18 @@ const REUSED_PLACEHOLDER: Record<string, string> = {
   google_api_key: '[REDACTED:google_api_key]',
   jwt_secret: '[REDACTED:jwt]',
   private_key: '[REDACTED:private_key]',
+  anthropic_key: '[REDACTED:anthropic_key]',
+  openai_key: '[REDACTED:openai_key]',
+  xai_key: '[REDACTED:xai_key]',
+  huggingface_token: '[REDACTED:huggingface_token]',
+  digitalocean_token: '[REDACTED:digitalocean_token]',
+  sendgrid_key: '[REDACTED:sendgrid_key]',
+  npm_token: '[REDACTED:npm_token]',
+  pypi_token: '[REDACTED:pypi_token]',
+  twilio_key: '[REDACTED:twilio_key]',
+  vercel_token: '[REDACTED:vercel_token]',
+  supabase_key: '[REDACTED:supabase_key]',
+  azure_key: '[REDACTED:azure_key]',
 };
 
 // Reused straight from the shared pattern leaf — same regex source, made global.
@@ -82,8 +111,9 @@ const REUSED: ScrubPattern[] = SECRET_PATTERNS.filter(
  * reused pattern so an entire private key is redacted, not just its `BEGIN`
  * line. `sk-ant-` / `sk-proj-` precede the generic `sk-` for accurate labels.
  *
- * The `(?<![A-Za-z0-9-])` look-behind anchors `sk-` at a boundary so ordinary
- * words ("risk-management-…", "task-oriented-…") are never mistaken for keys.
+ * The `(?<![A-Za-z0-9-])` look-behind anchors `sk-` / `xai-` at a boundary so
+ * ordinary words ("risk-management-…", "task-oriented-…") are never mistaken
+ * for keys.
  */
 const ADDED: ScrubPattern[] = [
   // Whole PEM private-key block (redact body, not just the header line).
@@ -106,6 +136,23 @@ const ADDED: ScrubPattern[] = [
     regex: /(?<![A-Za-z0-9-])sk-[A-Za-z0-9]{20,}/g,
     replacement: '[REDACTED:openai_key]',
   },
+  // xAI (Grok) API key — historically missing from this scrubber (sentinel +
+  // pattern gap); kept here as well as via REUSED so the label is stable even
+  // if SECRET_PATTERNS ordering changes.
+  {
+    regex: /(?<![A-Za-z0-9-])xai-[A-Za-z0-9_-]{20,}/g,
+    replacement: '[REDACTED:xai_key]',
+  },
+  // GitHub classic PAT — open-ended length so trailing body chars cannot leak
+  // when a slightly-too-long token is logged (fail-closed vs exact {36}).
+  {
+    regex: /ghp_[a-zA-Z0-9]{36,}/g,
+    replacement: '[REDACTED:github_token]',
+  },
+  {
+    regex: /github_pat_[a-zA-Z0-9_]{82,}/g,
+    replacement: '[REDACTED:github_token]',
+  },
   // Slack app/refresh tokens beyond xox[bpors] (xoxa, xoxr, …).
   {
     regex: /xox[a-z]-[A-Za-z0-9-]{10,}/g,
@@ -119,11 +166,81 @@ const ADDED: ScrubPattern[] = [
 ];
 
 // Full pattern list: ADDED (strong→weak) first so the full PEM block and the
-// specific sk-ant-/sk-proj- keys win before the reused header-only / generic ones.
+// specific sk-ant-/sk-proj-/xai- keys win before the reused header-only / generic ones.
 const SCRUB_PATTERNS: ScrubPattern[] = [...ADDED, ...REUSED];
 
 /** Bound recursion so a cyclic / pathological object can never hang. */
 const MAX_DEPTH = 6;
+
+// ============================================================================
+// Sensitive environment values (fail-closed for env-passed keys)
+// ============================================================================
+
+/**
+ * Env var names that typically carry credentials. Exact values are remembered
+ * and replaced even when they do not match a known token shape (e.g. a custom
+ * opaque secret). Kept deliberately name-based so ordinary PATH / HOME / LANG
+ * values are never treated as secrets.
+ */
+const SENSITIVE_ENV_NAME_RE =
+  /(?:API_?KEY|ACCESS_?KEY|SECRET|PASSWORD|PASSWD|AUTH_TOKEN|PRIVATE_KEY|ACCESS_TOKEN|GROK_API_KEY|XAI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GITHUB_TOKEN|GH_TOKEN|AWS_SECRET|AWS_ACCESS_KEY_ID|HF_TOKEN|NPM_TOKEN|VERCEL_TOKEN)$/i;
+
+/** Extra values registered at runtime (file-read secrets, tool results, …). */
+const rememberedSecrets = new Set<string>();
+
+let envCacheFingerprint = '';
+let envCacheValues: string[] = [];
+
+function envFingerprint(): string {
+  // Cheap, stable enough for hot-path caching. Recomputes when env size changes
+  // (typical for tests that set/unset keys between cases).
+  return `${Object.keys(process.env).length}:${process.env.PATH?.length ?? 0}:${process.env.XAI_API_KEY?.length ?? 0}:${process.env.GROK_API_KEY?.length ?? 0}:${process.env.OPENAI_API_KEY?.length ?? 0}:${process.env.ANTHROPIC_API_KEY?.length ?? 0}:${process.env.GITHUB_TOKEN?.length ?? 0}:${process.env.AWS_ACCESS_KEY_ID?.length ?? 0}`;
+}
+
+function getEnvSecretValues(): string[] {
+  const fp = envFingerprint();
+  if (fp === envCacheFingerprint) return envCacheValues;
+  const values: string[] = [];
+  for (const [name, value] of Object.entries(process.env)) {
+    if (!value || value.length < 8) continue;
+    if (!SENSITIVE_ENV_NAME_RE.test(name)) continue;
+    // Skip obvious non-secrets (booleans, tiny flags, file paths without entropy).
+    if (/^(true|false|1|0|yes|no)$/i.test(value)) continue;
+    values.push(value);
+  }
+  envCacheFingerprint = fp;
+  envCacheValues = values;
+  return values;
+}
+
+/**
+ * Remember an exact secret value for subsequent scrubbing. Used when an agent
+ * reads a secrets file or when callers want fail-closed coverage for opaque
+ * strings that do not match a known token shape. Values shorter than 8 chars
+ * are ignored (too ambiguous). Idempotent.
+ */
+export function rememberSecretValue(value: string): void {
+  if (typeof value !== 'string' || value.length < 8) return;
+  rememberedSecrets.add(value);
+}
+
+/** Test/helper: drop every remembered value (does not clear process.env). */
+export function clearRememberedSecrets(): void {
+  rememberedSecrets.clear();
+  envCacheFingerprint = '';
+  envCacheValues = [];
+}
+
+function redactExactValues(text: string, values: Iterable<string>): string {
+  let out = text;
+  for (const value of values) {
+    if (!value || value.length < 8) continue;
+    if (!out.includes(value)) continue;
+    // Split/join avoids RegExp special-char issues in the secret body.
+    out = out.split(value).join('[REDACTED:env_secret]');
+  }
+  return out;
+}
 
 // ============================================================================
 // Public API
@@ -131,30 +248,46 @@ const MAX_DEPTH = 6;
 
 /**
  * Redact every recognised secret in `text`. Secret-free input is returned
- * unchanged (value-identical). Never throws.
+ * unchanged (value-identical). Never throws. Fail-closed on internal errors.
  */
 export function scrubSecrets(text: string): string {
   if (typeof text !== 'string' || text.length === 0) return text;
   try {
-    // Fast path: no tell-tale prefix ⇒ nothing to do.
-    if (!SENTINEL_RE.test(text)) return text;
+    const envSecrets = getEnvSecretValues();
+    const hasRemembered =
+      rememberedSecrets.size > 0 || envSecrets.length > 0;
+
+    // Fast path: no tell-tale prefix AND no remembered/env secret ⇒ nothing to do.
+    if (!SENTINEL_RE.test(text)) {
+      if (!hasRemembered) return text;
+      // Still may need exact-value redaction even without a known prefix.
+      const exact = redactExactValues(
+        redactExactValues(text, envSecrets),
+        rememberedSecrets,
+      );
+      return exact;
+    }
 
     let out = text;
     for (const { regex, replacement } of SCRUB_PATTERNS) {
       regex.lastIndex = 0; // defensive — global regexes are module-shared
       out = out.replace(regex, replacement);
     }
+    if (hasRemembered) {
+      out = redactExactValues(redactExactValues(out, envSecrets), rememberedSecrets);
+    }
     return out;
   } catch {
-    // A malformed input or engine hiccup must never break logging/telemetry.
-    return text;
+    // Fail-closed: never return the original text after a scrub failure.
+    return SCRUB_ERROR_PLACEHOLDER;
   }
 }
 
 /**
  * Recursively scrub all string descendants of an arbitrary value (object,
- * array, or primitive). Depth-bounded, never-throws. Returns the SAME reference
- * when nothing was redacted, so secret-free structured payloads are untouched.
+ * array, or primitive). Depth-bounded, never-throws, fail-closed. Returns the
+ * SAME reference when nothing was redacted, so secret-free structured payloads
+ * are untouched.
  */
 export function scrubValue(value: unknown, depth = 0): unknown {
   try {
@@ -184,6 +317,7 @@ export function scrubValue(value: unknown, depth = 0): unknown {
     }
     return changed ? out : value;
   } catch {
-    return value;
+    // Fail-closed: collapse the unsafe payload rather than leaking it.
+    return SCRUB_ERROR_PLACEHOLDER;
   }
 }

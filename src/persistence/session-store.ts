@@ -12,6 +12,7 @@ import {
 } from '../database/optional-sqlite.js';
 import { withSessionLock } from './session-lock.js';
 import { logger } from '../utils/logger.js';
+import { scrubSecrets, scrubValue } from '../security/secret-scrubber.js';
 import { readJsonAtomicSync, writeFileAtomic, writeJsonAtomic } from '../utils/atomic-write.js';
 
 /** Metadata for chat sessions */
@@ -291,16 +292,20 @@ export class SessionStore {
   private async writeSessionUnlocked(session: Session): Promise<void> {
     if (this.ephemeral) return;
     const filePath = this.getSessionFilePath(session.id);
+    // Fail-closed: never persist raw credentials into session JSON (env keys,
+    // file-read secrets pasted into prompts, tool outputs…). Scrub before
+    // encryption so ciphertext also cannot be an oracle for cleartext secrets.
+    const scrubbedMessages = scrubValue(session.messages) as SessionMessage[];
     const data = {
       ...session,
       ...(this.shouldEncrypt(session) ? { encrypted: true } : {}),
       messages: this.shouldEncrypt(session)
-        ? await encryptSessionContent(session.messages, this.config.encryptionKeyPath)
-        : session.messages,
+        ? await encryptSessionContent(scrubbedMessages, this.config.encryptionKeyPath)
+        : scrubbedMessages,
       createdAt: session.createdAt.toISOString(),
       lastAccessedAt: new Date().toISOString(),
     };
-    await writeJsonAtomic(filePath, data, { mode: 0o600 });
+    await writeJsonAtomic(filePath, scrubValue(data), { mode: 0o600 });
   }
 
   /**

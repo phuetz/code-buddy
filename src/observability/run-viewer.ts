@@ -64,6 +64,7 @@ import {
   buildMobileSupervisionApprovalQueue,
   renderMobileSupervisionApprovalQueue,
 } from './mobile-supervision-approval-queue.js';
+import { scrubSecrets } from '../security/secret-scrubber.js';
 import {
   buildLearningRetrospective,
   renderLearningRetrospective,
@@ -178,7 +179,8 @@ function formatEvent(event: RunEvent, relativeMs?: number): string {
     detail = String(data.skillName || '').slice(0, 80);
   }
 
-  return `  ${icon} ${time}  ${event.type.padEnd(14)} ${detail}`;
+  // Defence in depth: historical journals may pre-date journal scrubbing.
+  return scrubSecrets(`  ${icon} ${time}  ${event.type.padEnd(14)} ${detail}`);
 }
 
 /**
@@ -229,7 +231,7 @@ export async function showRun(runId: string): Promise<void> {
   console.log('');
   console.log(`Run: ${runId}`);
   console.log(`Status: ${statusLabel(summary.status)}`);
-  console.log(`Objective: ${summary.objective}`);
+  console.log(`Objective: ${scrubSecrets(summary.objective)}`);
   if (summary.startedAt) {
     console.log(`Started: ${formatTs(summary.startedAt)}`);
   }

@@ -26,6 +26,7 @@ import { logger } from '../utils/logger.js';
 import { executeHermesLifecycleHook } from '../hooks/hermes-lifecycle-hooks.js';
 import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { auditLogger } from '../security/audit-logger.js';
+import { scrubSecrets, scrubValue } from '../security/secret-scrubber.js';
 
 // ──────────────────────────────────────────────────────────────────
 // Types
@@ -353,7 +354,7 @@ export class RunStore {
 
     const summary: RunSummary = {
       runId,
-      objective,
+      objective: scrubSecrets(objective),
       status: 'running',
       startedAt: Date.now(),
       eventCount: 0,
@@ -458,10 +459,14 @@ export class RunStore {
     const ws = this.handles.get(runId);
     if (!ws) return;
 
+    // Fail-closed: scrub BEFORE the in-memory buffer or the JSONL journal can
+    // observe a credential (env-passed keys, file-read secrets, tool args…).
+    const scrubbedData = scrubValue(event.data) as Record<string, unknown>;
     const fullEvent: RunEvent = {
       ts: Date.now(),
       runId,
-      ...event,
+      type: event.type,
+      data: scrubbedData,
     };
 
     const buffer = this.eventBuffers.get(runId);
@@ -469,7 +474,7 @@ export class RunStore {
       buffer.push(fullEvent);
     }
 
-    this.eventWriters.get(runId)?.write(JSON.stringify(fullEvent) + '\n');
+    this.eventWriters.get(runId)?.write(scrubSecrets(JSON.stringify(fullEvent)) + '\n');
 
     // Update in-memory count
     const count = (this.eventCounts.get(runId) || 0) + 1;
