@@ -115,9 +115,13 @@ export function createLoopCommand(): Command {
     .option('--judge-model <model>', 'Modèle du juge (défaut: modèle de session)')
     .option(
       '--verify-cmd <shell>',
-      'Gate de vérif DÉTERMINISTE (exit 0 = CONFIRMED) au lieu du Verifier LLM — ex. "npm test"',
+      'Condition mesurable : commande shell lancée dans le répertoire de travail après chaque tour ; exit 0 = CONFIRMED ET la boucle se termine en succès (code 0) sans juge LLM — ex. "npm test"',
     )
     .option('--no-verify', 'Désactiver le gate Verifier indépendant (boucle juge-seule)')
+    .option(
+      '--allow-extra-files',
+      'Ne pas interdire à l\'agent les fichiers hors tâche (rapports docs/reports/… demandés par les consignes du dépôt)',
+    )
     .option(
       '--no-structural',
       'Désactiver la couche structurelle zéro-LLM (fichiers vides/conflits/omissions/JSON) avant le Verifier',
@@ -138,6 +142,22 @@ export function createLoopCommand(): Command {
       'Max tool rounds par tour',
       value => parsePositiveIntegerOption(value, '--max-tool-rounds'),
       50,
+    )
+    .addHelpText(
+      'after',
+      `
+Condition d'arrêt : avec --verify-cmd, la commande EST la sortie (exit 0 => succès, code retour 0,
+sans juge LLM). Sans elle, le juge LLM décide, sous le gate du Verifier.
+
+Permissions en non interactif : \`bash\` et \`execute_code\` exigent une confirmation, impossible
+sans terminal ; ils sont donc refusés avec --permission-mode default, acceptEdits ou dontAsk
+(acceptEdits n'auto-approuve que les ÉDITIONS de fichiers). Seul bypassPermissions les
+auto-approuve, ce qui n'est pas recommandé. Bonne pratique : laisser l'agent éditer, et mettre
+les commandes de test/typecheck dans --verify-cmd, exécuté par la boucle hors de l'agent.
+
+Périmètre : par défaut l'agent reçoit l'ordre de ne créer aucun fichier hors tâche
+(--allow-extra-files pour suivre les consignes du dépôt, p. ex. rapports de mission).
+`,
     )
     .action(async (goal: string, options, command) => {
       // Fail closed: a vanished turn (stall, killed child, nested parse) must
@@ -200,13 +220,17 @@ export function createLoopCommand(): Command {
 
         const { runDevLoop, makeShellVerifier } = await import('../agent/dev-loop/dev-loop.js');
         // --verify-cmd swaps the LLM Verifier for a deterministic shell gate.
+        if (options.verifyCmd && options.verify === false) {
+          throw new Error('--verify-cmd et --no-verify sont incompatibles (la commande est la vérification).');
+        }
         const verify = options.verifyCmd ? makeShellVerifier(options.verifyCmd, { cwd }) : undefined;
         const noVerify = options.verify === false;
         const result = await runDevLoop(agent, goal, {
           ...(options.maxTurns !== undefined ? { maxTurns: options.maxTurns } : {}),
           ...(options.budget !== undefined ? { budgetUsd: options.budget } : {}),
           ...(judgeModel ? { judgeModel } : {}),
-          ...(verify ? { verify } : {}),
+          ...(verify ? { verify, deterministicGate: true } : {}),
+          scopeGuard: !options.allowExtraFiles,
           noVerify,
           noStructural: options.structural === false,
           noPlan: options.plan === false,

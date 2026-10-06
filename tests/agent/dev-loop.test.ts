@@ -8,10 +8,14 @@
  * budget stops the loop. --no-verify falls back to judge-only.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 import {
   runDevLoop,
   makeShellVerifier,
+  DEV_LOOP_SCOPE_GUARD,
   parseVerifierCriterionResults,
   type DevLoopAgent,
   type DevLoopVerifier,
@@ -285,5 +289,142 @@ describe('runDevLoop — structural gate (zero-LLM layer)', () => {
 
     expect(prompts.length).toBeGreaterThan(1);
     expect(prompts[1]).toContain('tests still failing: X should equal 2');
+  });
+});
+
+describe('runDevLoop — la condition mesurable EST la sortie (--verify-cmd)', () => {
+  it('termine en done dès que la commande sort 0, sans consulter le juge', async () => {
+    judgeMock.mockResolvedValue({ verdict: 'continue', reason: 'evidence required', parseFailed: false });
+    const result = await runDevLoop(fakeAgent(['work']), 'court objectif', {
+      maxTurns: 12,
+      verify: makeShellVerifier('true'),
+      deterministicGate: true,
+      currentCostUsd: zeroCost,
+      noPlan: true,
+    });
+    expect(result.status).toBe('done');
+    expect(result.turnsUsed).toBe(1);
+    expect(result.lastVerifierVerdict).toBe('CONFIRMED');
+    expect(judgeMock).not.toHaveBeenCalled();
+    const { loopRunSucceeded } = await import('../../src/commands/loop-cli.js');
+    expect(loopRunSucceeded(result, false)).toBe(true);
+  });
+
+  it('sans condition mesurable, le juge garde la main (comportement inchangé)', async () => {
+    judgeMock.mockResolvedValue({ verdict: 'continue', reason: 'keep going', parseFailed: false });
+    const result = await runDevLoop(fakeAgent(['work']), 'court objectif', {
+      maxTurns: 3,
+      verify: makeShellVerifier('true'),
+      currentCostUsd: zeroCost,
+      noPlan: true,
+    });
+    expect(result.status).toBe('paused');
+    expect(judgeMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('la commande tourne dans le cwd de la boucle, APRÈS le tour, et son code de sortie est lu', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devloop-gate-'));
+    try {
+      judgeMock.mockResolvedValue({ verdict: 'continue', reason: 'keep going', parseFailed: false });
+      let turn = 0;
+      const agent: DevLoopAgent = {
+        processUserMessage: async (): Promise<ChatEntry[]> => {
+          turn += 1;
+          // Le fichier attendu n'apparaît qu'au tour 2.
+          if (turn === 2) fs.writeFileSync(path.join(dir, 'marqueur.txt'), 'ok');
+          return [{ type: 'assistant', content: `tour ${turn}` } as ChatEntry];
+        },
+        getClient: () => ({}) as never,
+        executeToolByName: async () => ({ success: true, output: '' }),
+      };
+      const verdicts: string[] = [];
+      const result = await runDevLoop(agent, 'court objectif', {
+        maxTurns: 5,
+        verify: makeShellVerifier('test -f marqueur.txt', { cwd: dir }),
+        deterministicGate: true,
+        currentCostUsd: zeroCost,
+        noPlan: true,
+        onMessage: (t) => {
+          if (t.includes('Verifier')) verdicts.push(t);
+        },
+      });
+      expect(verdicts[0]).toContain('NEEDS REVIEW'); // tour 1 : pas de fichier => exit 1
+      expect(verdicts[1]).toContain('CONFIRMED'); // tour 2 : fichier présent => exit 0
+      expect(result.status).toBe('done');
+      expect(result.turnsUsed).toBe(2);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('un code de sortie absent (tué par signal, délai dépassé) n\'est jamais lu comme 0', async () => {
+    const killed = await makeShellVerifier('kill -9 $$')({ agent: fakeAgent(['x']), goal: 'g', evidence: 'e' });
+    const slow = await makeShellVerifier('sleep 5', { timeoutMs: 50 })({ agent: fakeAgent(['x']), goal: 'g', evidence: 'e' });
+    expect(killed.verdict).toBe('NEEDS REVIEW');
+    expect(slow.verdict).toBe('NEEDS REVIEW');
+  });
+
+  it('évalue la commande même quand le tour ne produit aucun texte', async () => {
+    judgeMock.mockResolvedValue({ verdict: 'continue', reason: 'x', parseFailed: false });
+    const agent: DevLoopAgent = {
+      processUserMessage: async () => [],
+      getClient: () => ({}) as never,
+      executeToolByName: async () => ({ success: true, output: '' }),
+    };
+    const result = await runDevLoop(agent, 'court objectif', {
+      maxTurns: 3,
+      verify: makeShellVerifier('true'),
+      deterministicGate: true,
+      currentCostUsd: zeroCost,
+      noPlan: true,
+    });
+    expect(result.status).toBe('done');
+  });
+});
+
+describe('runDevLoop — budget coût', () => {
+  it('s\'arrête quand le coût cumulé réel atteint --budget, tour par tour', async () => {
+    judgeMock.mockResolvedValue({ verdict: 'continue', reason: 'keep going', parseFailed: false });
+    let spent = 0;
+    const agent = fakeAgent(['work']);
+    const base = agent.processUserMessage.bind(agent);
+    agent.processUserMessage = async (m: string) => {
+      spent += 0.4; // coût réel facturé par tour
+      return base(m);
+    };
+    const result = await runDevLoop(agent, 'court objectif', {
+      maxTurns: 10,
+      budgetUsd: 1,
+      currentCostUsd: () => spent,
+      verify: async () => ({ verdict: 'NEEDS REVIEW', evidence: 'e' }),
+      noPlan: true,
+    });
+    expect(result.status).toBe('paused');
+    expect(result.turnsUsed).toBe(3); // 0,4 -> 0,8 -> 1,2 >= 1
+  });
+});
+
+describe('runDevLoop — périmètre (aucun fichier hors tâche)', () => {
+  it('ajoute la consigne de périmètre à chaque prompt, désactivable', async () => {
+    judgeMock.mockResolvedValue({ verdict: 'continue', reason: 'again', parseFailed: false });
+    for (const [scopeGuard, expected] of [[undefined, true], [false, false]] as const) {
+      const seen: string[] = [];
+      const agent = fakeAgent(['work']);
+      const base = agent.processUserMessage.bind(agent);
+      agent.processUserMessage = async (m: string) => {
+        seen.push(m);
+        return base(m);
+      };
+      await runDevLoop(agent, 'court objectif', {
+        maxTurns: 2,
+        ...(scopeGuard === undefined ? {} : { scopeGuard }),
+        verify: async () => ({ verdict: 'NEEDS REVIEW', evidence: 'e' }),
+        currentCostUsd: zeroCost,
+        noPlan: true,
+      });
+      expect(seen.length).toBe(2);
+      for (const m of seen) expect(m.includes(DEV_LOOP_SCOPE_GUARD)).toBe(expected);
+      resetGoalManagers();
+    }
   });
 });

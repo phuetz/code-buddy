@@ -94,6 +94,19 @@ export interface DevLoopOptions {
   cwd?: string;
   /** Override du vérificateur (tests) ; défaut = Verifier agent via le registry. */
   verify?: DevLoopVerifier;
+  /**
+   * `verify` est une condition mesurable (ex. `--verify-cmd`, exit 0). Elle EST
+   * la sortie : dès qu'elle CONFIRME, la boucle termine en `done` sans passer
+   * par le juge LLM (qui ne garde la main que sans condition mesurable). Elle
+   * est évaluée après CHAQUE tour, même si l'agent n'a rien dit.
+   */
+  deterministicGate?: boolean;
+  /**
+   * Garde-fou de périmètre (défaut true) : le prompt demande à l'agent de ne
+   * créer aucun fichier hors de ce que la tâche exige (pas de rapport/doc
+   * demandé par les consignes du dépôt). `false` = laisse les consignes du dépôt.
+   */
+  scopeGuard?: boolean;
   /** Lecteur de coût session (tests) ; défaut = getCostTracker. */
   currentCostUsd?: () => number;
   /** Inject/disable durable proof recording. Defaults on for real cwd-owned runs. */
@@ -116,6 +129,12 @@ export interface DevLoopResult {
 }
 
 const TOOL_RESULT_SNIPPET_CHARS = 1600;
+
+/** Consigne de périmètre ajoutée à chaque prompt de tour (voir `scopeGuard`). */
+export const DEV_LOOP_SCOPE_GUARD =
+  '[Périmètre de la boucle] Ne crée ni ne modifie AUCUN fichier qui n\'est pas nécessaire à la tâche : ' +
+  'pas de rapport de mission, pas de fichier sous docs/reports/, pas de documentation, ' +
+  'même si les consignes du dépôt en demandent un. Écris seulement ce que l\'objectif exige.';
 
 /** Résume un tour en évidences (assistant + [tool:x success|error]) pour le juge. */
 function summarizeTurn(entries: ChatEntry[]): string {
@@ -313,6 +332,8 @@ export async function runDevLoop(
     }
   }
 
+  const withGuard = (text: string): string =>
+    options.scopeGuard === false ? text : `${DEV_LOOP_SCOPE_GUARD}\n\n${text}`;
   let prompt = state.goal;
   let lastVerifierVerdict: VerifierVerdict = 'unverified';
   let lastVerifyEvidence = '';
@@ -325,7 +346,7 @@ export async function runDevLoop(
     const preStatus = structuralCwd ? await gitStatusSnapshot(structuralCwd) : null;
     let entries: ChatEntry[];
     try {
-      entries = await agent.processUserMessage(prompt);
+      entries = await agent.processUserMessage(withGuard(prompt));
     } catch (error) {
       // A stalled/thrown turn must never look like success: pause with the
       // raw error so `buddy loop` can exit 1 instead of vanishing.
@@ -368,7 +389,7 @@ export async function runDevLoop(
         status: 'unknown',
         evidence: 'Structural verifier rejected the turn before criterion validation.',
       }));
-    } else if (!options.noVerify && turnSummary.trim()) {
+    } else if (!options.noVerify && (turnSummary.trim() || options.deterministicGate)) {
       const v = await verify({ agent, goal: state.goal, evidence: turnSummary, criteria });
       lastVerifierVerdict = v.verdict;
       lastVerifyEvidence = v.evidence;
@@ -406,6 +427,32 @@ export async function runDevLoop(
         sessionKey: manager.sessionKey,
         source: 'buddy-loop',
       });
+    }
+
+    // 2c) CONDITION MESURABLE = SORTIE. Une commande déterministe qui sort 0
+    // conclut la boucle sans juge LLM ; le juge ne garde la main que sans elle.
+    if (
+      options.deterministicGate &&
+      !options.noVerify &&
+      !structuralEvidence &&
+      lastVerifierVerdict === 'CONFIRMED'
+    ) {
+      const reason = 'verify-cmd exit 0 (condition mesurable satisfaite)';
+      manager.markDone(reason, { countTurn: true });
+      emit(`✓ Goal achieved: ${reason}`);
+      recordProof({
+        turn: manager.state?.turnsUsed ?? i + 1,
+        kind: 'decision',
+        status: 'pass',
+        assurance: 'deterministic',
+        summary: reason,
+        evidence,
+        criterionIds: manager.state ? intentCriterionIds(buildIntentGraph(manager.state)) : [],
+        artifacts: touchedFiles,
+        sessionKey: manager.sessionKey,
+        source: 'buddy-loop',
+      });
+      break;
     }
 
     // 3) JUDGE — un « done » du juge est ANNULÉ tant que le Verifier n'a pas CONFIRMED.

@@ -148,8 +148,12 @@ export class GoalManager {
     this._state = null;
   }
 
-  markDone(reason: string): void {
+  markDone(reason: string, options: { countTurn?: boolean } = {}): void {
     if (!this._state) return;
+    if (options.countTurn) {
+      this._state.turnsUsed += 1;
+      this._state.lastTurnAt = Date.now();
+    }
     this._state.status = 'done';
     this._state.lastVerdict = 'done';
     this._state.lastReason = reason;

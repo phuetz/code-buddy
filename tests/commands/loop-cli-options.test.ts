@@ -34,6 +34,20 @@ describe('buddy loop — options de ligne de commande', () => {
   });
 });
 
+describe('buddy loop — aide', () => {
+  it('documente la condition d\'arrêt, le refus de bash en non interactif et le périmètre', () => {
+    const cmd = createLoopCommand();
+    let help = '';
+    cmd.configureOutput({ writeOut: (s) => { help += s; } });
+    cmd.outputHelp();
+    expect(help).toContain('exit 0');
+    expect(help).toContain('--verify-cmd');
+    expect(help).toMatch(/bash.*confirmation/s);
+    expect(help).toContain('bypassPermissions');
+    expect(help).toContain('--allow-extra-files');
+  });
+});
+
 describe('loopRunSucceeded', () => {
   it('refuses exit-0 when the judge says done without an independent CONFIRMED verdict', () => {
     expect(loopRunSucceeded({ status: 'done', lastVerifierVerdict: 'NEEDS REVIEW' }, false)).toBe(false);
