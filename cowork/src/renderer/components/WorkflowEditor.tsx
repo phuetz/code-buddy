@@ -439,7 +439,7 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({
                   <text
                     x={16}
                     y={36}
-                    fill="var(--color-text-muted)"
+                    fill="var(--color-text-secondary)"
                     fontSize={9}
                   >
                     {status ? `${node.type} · ${status}` : node.type}

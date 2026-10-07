@@ -26,7 +26,11 @@ describe('dark theme palette', () => {
 
   it('keeps the accent within the warm orange family', () => {
     const source = fs.readFileSync(stylesPath, 'utf8');
-    expect(source).toContain('--color-accent: #d67a52;');
-    expect(source).toContain('--color-accent-hover: #c56c46;');
+    const dark = source.split('  :root {')[1]?.split('  }')[0];
+    const light = source.split('  .light {')[1]?.split('  }')[0];
+    expect(dark).toContain('--color-accent: #e08a5f;');
+    expect(dark).toContain('--color-on-accent: #1a0e08;');
+    expect(light).toContain('--color-accent: #a8461f;');
+    expect(light).toContain('--color-on-accent: #ffffff;');
   });
 });
