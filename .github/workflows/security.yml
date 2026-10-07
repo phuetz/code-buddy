@@ -28,7 +28,7 @@ jobs:
       run: npm ci
 
     - name: Run Security Audit
-      run: npm audit --audit-level=high
+      run: node scripts/ci-audit-gate.mjs
 
     - name: Scan for Secrets
       uses: trufflesecurity/trufflehog@v3.90.1
