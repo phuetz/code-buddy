@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-assistant",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "61d95c67eed978681bef5ff13ba889ea56cfd27cddb18bb1b72a386ce6795485",
+  "artifact": "docs/preuves/p8-cli-assistant.log",
+  "summary": "TTS engine: pocket puis piper relu dans un autre processus."
+}

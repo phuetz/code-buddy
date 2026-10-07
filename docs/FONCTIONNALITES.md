@@ -15,10 +15,10 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-dev` — Developer workflows | Lancez des parcours guidés de planification, réalisation et vérification. | **Testée localement** | [Trace réelle](preuves/p7-cli-dev.log); [Maillons vérifiés](preuves/verification-statique.md#cli-dev) |
 | `cli-skills` — Installed skills | Listez les packs de skills installés et leur origine. | **Testée localement** | [Trace réelle](preuves/p5-cli-skills-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-skills) |
 | `cli-bundles` — Skill bundles | Regroupez des skills sous une commande nommée. | **Testée localement** | [Trace réelle](preuves/p5-cli-bundles-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-bundles) |
-| `cli-lsp` — LSP diagnostics | Inspectez les diagnostics du serveur de langage. | **Échec constaté** | [Trace de l’échec](preuves/p5-cli-lsp-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-lsp) |
-| `tool-web-search` — Web search | Obtenez des résultats web pour une tâche de l’agent. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-web-search) |
+| `cli-lsp` — LSP diagnostics | Inspectez les diagnostics du serveur de langage. | **Échec constaté** | [Trace de l’échec](preuves/p8-cli-lsp.log); [Maillons vérifiés](preuves/verification-statique.md#cli-lsp) |
+| `tool-web-search` — Web search | Obtenez des résultats web pour une tâche de l’agent. | **Testée localement** | [Trace réelle](preuves/p8-tool-web-search.log); [Maillons vérifiés](preuves/verification-statique.md#tool-web-search) |
 | `tool-browser` — Browser automation | Parcourez des pages avec l’outil navigateur de l’agent. | **Testée localement** | [Trace réelle](preuves/p7-tool-browser.log); [Maillons vérifiés](preuves/verification-statique.md#tool-browser) |
-| `tool-deep-research` — Deep research | Préparez un rapport de recherche étayé en plusieurs étapes. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-deep-research) |
+| `tool-deep-research` — Deep research | Préparez un rapport de recherche étayé en plusieurs étapes. | **Testée localement** | [Trace réelle](preuves/p8-tool-deep-research.log); [Maillons vérifiés](preuves/verification-statique.md#tool-deep-research) |
 | `tool-verify` — Verification tool | Demandez à l’agent de vérifier un résultat concret. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-verify) |
 | `agent-loop` — Agent tool loop | Poursuivez une demande sur plusieurs réponses du modèle et résultats d’outils. | **Testée localement** | [Trace réelle](preuves/p5-agent-loop-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#agent-loop) |
 | `tool-read-file` — File reading | Laissez l’agent lire un fichier du projet avant de répondre. | **Testée localement** | [Trace réelle](preuves/p5-tool-read-file-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#tool-read-file) |
@@ -28,7 +28,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
-| `cli-auth-profile` — Authentication profiles | Gérez les profils d’authentification des fournisseurs. | **Échec constaté** | [Trace de l’échec](preuves/p7-cli-auth-profile.log); [Maillons vérifiés](preuves/verification-statique.md#cli-auth-profile) |
+| `cli-auth-profile` — Authentication profiles | Gérez les profils d’authentification des fournisseurs. | **Testée localement** | [Trace réelle](preuves/p8-cli-auth-profile.log); [Maillons vérifiés](preuves/verification-statique.md#cli-auth-profile) |
 | `provider-ollama` — Local Ollama provider | Utilisez un modèle servi localement sans clé API payante. | **Testée localement** | [Trace réelle](preuves/p5-provider-ollama-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#provider-ollama) |
 | `provider-failover` — Provider failover | Basculez vers un fournisseur configuré après un échec admissible. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#provider-failover) |
 | `provider-chatgpt-oauth` — ChatGPT OAuth provider | Utilisez un backend Responses authentifié par ChatGPT. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#provider-chatgpt-oauth) |
@@ -54,7 +54,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `fleet-cli` — Commandes de la flotte | Inspectez et pilotez la flotte multi-agents dans le terminal. | **Testée localement** | [Trace réelle](preuves/p6-fleet-cli.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-cli) |
 | `cli-ruche` — Signed coordination | Échangez des messages de coordination signés. | **Testée localement** | [Trace réelle](preuves/p7-cli-ruche.log); [Maillons vérifiés](preuves/verification-statique.md#cli-ruche) |
 | `cli-device` — Remote device nodes | Gérez des nœuds SSH, ADB et locaux. | **Testée localement** | [Trace réelle](preuves/p5-cli-device-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-device) |
-| `cli-nodes` — Companion app nodes | Gérez les nœuds de l’application compagnon sur ordinateur et mobile. | **Échec constaté** | [Trace de l’échec](preuves/p7-cli-nodes.log); [Maillons vérifiés](preuves/verification-statique.md#cli-nodes) |
+| `cli-nodes` — Companion app nodes | Gérez les nœuds de l’application compagnon sur ordinateur et mobile. | **Testée localement** | [Trace réelle](preuves/p8-cli-nodes.log); [Maillons vérifiés](preuves/verification-statique.md#cli-nodes) |
 | `fleet-peer-chat` — Peer chat | Envoyez une requête au modèle d’un pair connecté de la flotte. | **Testée localement** | [Trace réelle](preuves/p6-fleet-peer-chat.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-chat) |
 | `fleet-peer-tools` — Peer read-only tools | Demandez un outil autorisé en lecture seule à un pair. | **Testée localement** | [Trace réelle](preuves/p6-fleet-peer-tools.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-tools) |
 | `fleet-peer-sessions` — Multi-turn peer sessions | Poursuivez une conversation avec un pair de la flotte sur plusieurs tours. | **Testée localement** | [Trace réelle](preuves/p6-fleet-peer-sessions.log); [Maillons vérifiés](preuves/verification-statique.md#fleet-peer-sessions) |
@@ -102,8 +102,8 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 |---|---|---|---|
 | `telegram-channel` — Canal Telegram | Reliez les conversations à Telegram. | **Testée localement** | [Trace réelle](preuves/p7-telegram-channel.log); [Maillons vérifiés](preuves/verification-statique.md#telegram-channel) |
 | `cli-speak` — Speech synthesis | Produisez une sortie vocale à partir de texte. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-speak) |
-| `cli-assistant` — Voice assistant | Configurez l’assistante vocale Lisa. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-assistant) |
-| `cli-heartbeat` — Heartbeat engine | Inspectez et configurez les réveils périodiques de l’agent. | **Échec constaté** | [Trace de l’échec](preuves/p7-cli-heartbeat.log); [Maillons vérifiés](preuves/verification-statique.md#cli-heartbeat) |
+| `cli-assistant` — Voice assistant | Configurez l’assistante vocale Lisa. | **Testée localement** | [Trace réelle](preuves/p8-cli-assistant.log); [Maillons vérifiés](preuves/verification-statique.md#cli-assistant) |
+| `cli-heartbeat` — Heartbeat engine | Inspectez et configurez les réveils périodiques de l’agent. | **Testée localement** | [Trace réelle](preuves/p8-cli-heartbeat.log); [Maillons vérifiés](preuves/verification-statique.md#cli-heartbeat) |
 | `cli-screen` — Screen capture | Capturez ou surveillez l’activité du bureau. | **Testée localement** | [Trace réelle](preuves/p7-cli-screen.log); [Maillons vérifiés](preuves/verification-statique.md#cli-screen) |
 | `cli-companion` — Companion settings | Configurez le comportement et la voix du compagnon. | **Testée localement** | [Trace réelle](preuves/p7-cli-companion.log); [Maillons vérifiés](preuves/verification-statique.md#cli-companion) |
 | `sensory-voice-loop` — Voice conversation loop | Transformez la parole entendue en réponse vocale du compagnon. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#sensory-voice-loop) |
@@ -115,7 +115,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-film` — Film production | Assemblez des clips de scènes en film. | **Testée localement** | [Trace réelle](preuves/p6-cli-film.log); [Maillons vérifiés](preuves/verification-statique.md#cli-film) |
 | `tool-image-generate` — Image generation | Demandez une image au fournisseur configuré. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-image-generate) |
 | `tool-video-generate` — Video generation | Demandez un clip vidéo au moteur configuré. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#tool-video-generate) |
-| `tool-understand-video` — Video understanding | Extrayez des informations vidéo avec les outils médias configurés. | **Échec constaté** | [Trace de l’échec](preuves/p7-tool-understand-video.log); [Maillons vérifiés](preuves/verification-statique.md#tool-understand-video) |
+| `tool-understand-video` — Video understanding | Extrayez des informations vidéo avec les outils médias configurés. | **Échec constaté** | [Trace de l’échec](preuves/p8-tool-understand-video.log); [Maillons vérifiés](preuves/verification-statique.md#tool-understand-video) |
 | `media-film-assemble` — Film assembly | Assemblez des clips prêts avec transitions et audio. | **Testée localement** | [Trace réelle](preuves/p6-media-film-assemble.log); [Maillons vérifiés](preuves/verification-statique.md#media-film-assemble) |
 | `media-video-stitch` — Video clip stitching | Combinez des clips prêts avec transitions. | **Testée localement** | [Trace réelle](preuves/p6-media-video-stitch.log); [Maillons vérifiés](preuves/verification-statique.md#media-video-stitch) |
 
@@ -124,7 +124,7 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | Fonctionnalité | Bénéfice utilisateur | État | Preuve |
 |---|---|---|---|
 | `cli-security` — Security audit | Auditez la sécurité du projet et du profil local. | **Testée localement** | [Trace réelle](preuves/p6-cli-security.log); [Maillons vérifiés](preuves/verification-statique.md#cli-security) |
-| `cli-groups` — Group chat security | Configurez les accès aux discussions de groupe. | **Échec constaté** | [Trace de l’échec](preuves/p5-cli-groups-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-groups) |
+| `cli-groups` — Group chat security | Configurez les accès aux discussions de groupe. | **Testée localement** | [Trace réelle](preuves/p8-cli-groups.log); [Maillons vérifiés](preuves/verification-statique.md#cli-groups) |
 | `cli-policy` — Policy diagnostics | Inspectez et réparez les constats de politique par domaine. | **Testée localement** | [Trace réelle](preuves/p6-cli-policy.log); [Maillons vérifiés](preuves/verification-statique.md#cli-policy) |
 | `cli-secrets` — Encrypted secrets vault | Gérez les identifiants dans le coffre local chiffré. | **Testée localement** | [Trace réelle](preuves/p7-cli-secrets.log); [Maillons vérifiés](preuves/verification-statique.md#cli-secrets) |
 | `cli-approvals` — Action approvals | Examinez les approbations d’outils et d’actions en attente. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-approvals) |
@@ -146,9 +146,9 @@ Preuves : [audit statique des raccordements](preuves/verification-statique.md) �
 | `cli-run` — Run observability | Inspectez les traces et rejouez les exécutions de l’agent. | **Testée localement** | [Trace réelle](preuves/p5-cli-run-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-run) |
 | `cli-cron` — Scheduled jobs | Créez et gérez des tâches planifiées. | **Testée localement** | [Trace réelle](preuves/p7-cli-cron.log); [Maillons vérifiés](preuves/verification-statique.md#cli-cron) |
 | `cli-insights` — Usage insights | Consultez les mesures de jetons, de coût et d’activité. | **Testée localement** | [Trace réelle](preuves/p7-cli-insights.log); [Maillons vérifiés](preuves/verification-statique.md#cli-insights) |
-| `cli-deploy` — Web deployment workflow | Préparez un déploiement web par un parcours CLI. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-deploy) |
+| `cli-deploy` — Web deployment workflow | Préparez un déploiement web par un parcours CLI. | **Testée localement** | [Trace réelle](preuves/p8-cli-deploy.log); [Maillons vérifiés](preuves/verification-statique.md#cli-deploy) |
 | `cli-provision` — Project provisioning | Préparez base de données et authentification d’un projet généré. | **Testée localement** | [Trace réelle](preuves/p5-cli-provision-2026-09-29.log); [Maillons vérifiés](preuves/verification-statique.md#cli-provision) |
-| `cli-update` — Update channels | Inspectez les canaux de mise à jour. | **Raccordée** | [Maillons vérifiés](preuves/verification-statique.md#cli-update) |
+| `cli-update` — Update channels | Inspectez les canaux de mise à jour. | **Testée localement** | [Trace réelle](preuves/p8-cli-update.log); [Maillons vérifiés](preuves/verification-statique.md#cli-update) |
 
 ## Limites
 

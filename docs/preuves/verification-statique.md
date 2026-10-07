@@ -1,4 +1,4 @@
-# Static source and wiring audit — 2026-09-27
+# Static source and wiring audit — updated 2026-09-29
 
 This audit lists the checked source files and executable code fragments for each curated feature. It is **static evidence only**. A passing entry here is *wired*, not a successful user scenario or an installed release. All paths are repository relative.
 
@@ -90,17 +90,17 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'speak'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerSpeakCommand(program)`.
 - Entrypoint check: `src/commands/cli/speak-command.ts` contains code fragment `registerSpeakCommand`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live limit: No AudioReader, Pocket or Voicebox backend was started inside the isolated session; the command has no Piper backend despite Piper being installed, and host audio services were left untouched.
 
 ## cli-assistant
 
 - Domain: `sensory`
-- Code: `src/commands/assistant.ts`
+- Code: `src/commands/assistant.ts`, `src/companion/assistant-config.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'assistant'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerAssistantCommand(program)`.
 - Entrypoint check: `src/commands/assistant.ts` contains code fragment `registerAssistantCommand`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live trace: [p8-cli-assistant.log](p8-cli-assistant.log).
 
 ## cli-widgets
 
@@ -125,12 +125,12 @@ This audit lists the checked source files and executable code fragments for each
 ## cli-heartbeat
 
 - Domain: `sensory`
-- Code: `src/commands/cli/native-engine-commands.ts`
+- Code: `src/commands/cli/native-engine-commands.ts`, `src/daemon/heartbeat.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'heartbeat'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerHeartbeatCommands(program)`.
 - Entrypoint check: `src/commands/cli/native-engine-commands.ts` contains code fragment `registerHeartbeatCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live trace: [p8-cli-heartbeat.log](p8-cli-heartbeat.log).
 
 ## cli-hub
 
@@ -140,7 +140,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'hub'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerHubCommands(program)`.
 - Entrypoint check: `src/commands/cli/native-engine-commands.ts` contains code fragment `registerHubCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live limit: An isolated hub search returned zero matches and list returned zero hub-installed skills (8 bundled); no shared skill was available to install or manage.
 
 ## cli-curator
 
@@ -215,22 +215,22 @@ This audit lists the checked source files and executable code fragments for each
 ## cli-groups
 
 - Domain: `security`
-- Code: `src/commands/cli/native-engine-commands.ts`
+- Code: `src/commands/cli/native-engine-commands.ts`, `src/channels/group-security.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'groups'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerGroupCommands(program)`.
 - Entrypoint check: `src/commands/cli/native-engine-commands.ts` contains code fragment `registerGroupCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live trace: [p8-cli-groups.log](p8-cli-groups.log).
 
 ## cli-auth-profile
 
 - Domain: `providers`
-- Code: `src/commands/cli/native-engine-commands.ts`
+- Code: `src/commands/cli/native-engine-commands.ts`, `src/auth/profile-manager.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'auth-profile'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerAuthProfileCommands(program)`.
 - Entrypoint check: `src/commands/cli/native-engine-commands.ts` contains code fragment `registerAuthProfileCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live trace: [p8-cli-auth-profile.log](p8-cli-auth-profile.log).
 
 ## cli-code-explorer
 
@@ -240,7 +240,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'code-explorer'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerCodeExplorerCommands(program)`.
 - Entrypoint check: `src/commands/cli/code-explorer-commands.ts` contains code fragment `registerCodeExplorerCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live limit: CODE_EXPLORER_ENDPOINT is unset in the isolated HOME; the CLI reports that CodeExplorer is not configured, so no graph query was completed.
 
 ## cli-hermes
 
@@ -351,12 +351,12 @@ This audit lists the checked source files and executable code fragments for each
 ## cli-nodes
 
 - Domain: `fleet`
-- Code: `src/commands/cli/node-commands.ts`
+- Code: `src/commands/cli/node-commands.ts`, `src/nodes/index.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'nodes'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerNodeCommands(program)`.
 - Entrypoint check: `src/commands/cli/node-commands.ts` contains code fragment `registerNodeCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live trace: [p8-cli-nodes.log](p8-cli-nodes.log).
 
 ## cli-secrets
 
@@ -375,7 +375,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'approvals'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerApprovalsCommands(program)`.
 - Entrypoint check: `src/commands/cli/approvals-command.ts` contains code fragment `registerApprovalsCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live limit: The production CLI has no request-creation path: ApprovalsStore.create is called only by an external harness, and a new CLI process lists no pending requests. No real tool approval was observed.
 
 ## cli-insights
 
@@ -424,7 +424,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'lsp'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerLspCommands(program)`.
 - Entrypoint check: `src/commands/cli/lsp-command.ts` contains code fragment `registerLspCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live failure: [p8-cli-lsp.log](p8-cli-lsp.log).
 
 ## cli-proxy
 
@@ -439,12 +439,12 @@ This audit lists the checked source files and executable code fragments for each
 ## cli-deploy
 
 - Domain: `cli`
-- Code: `src/commands/cli/deploy-command.ts`
+- Code: `src/commands/cli/deploy-command.ts`, `src/deploy/cloud-configs.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/index.ts` contains code fragment `addLazyCommandGroup(program, 'deploy'`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerDeployCommands(program)`.
 - Entrypoint check: `src/commands/cli/deploy-command.ts` contains code fragment `registerDeployCommands`.
-- Live limit: Functional execution needs its dependencies and a separate live run.
+- Live trace: [p8-cli-deploy.log](p8-cli-deploy.log).
 
 ## cli-provision
 
@@ -514,17 +514,17 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/index.ts` contains code fragment `'update',`.
 - Entrypoint check: `src/index.ts` contains code fragment `createUpdateCommand()`.
 - Entrypoint check: `src/commands/update.ts` contains code fragment `createUpdateCommand`.
-- Live limit: A live run is needed for the requested action.
+- Live trace: [p8-cli-update.log](p8-cli-update.log).
 
 ## tool-web-search
 
 - Domain: `agent-tools`
-- Code: `src/codebuddy/tool-definitions/web-tools.ts`, `src/tools/registry/web-tools.ts`
+- Code: `src/codebuddy/tool-definitions/web-tools.ts`, `src/tools/registry/web-tools.ts`, `src/tools/web-search.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/codebuddy/tool-definitions/web-tools.ts` contains code fragment `name: 'web_search'`.
 - Entrypoint check: `src/tools/registry/web-tools.ts` contains code fragment `createWebTools`.
 - Entrypoint check: `src/tools/registry/interactive-adapters.ts` contains code fragment `...createWebTools()`.
-- Live limit: Requires a configured runtime or external service and a real agent turn.
+- Live trace: [p8-tool-web-search.log](p8-tool-web-search.log).
 
 ## tool-browser
 
@@ -539,12 +539,12 @@ This audit lists the checked source files and executable code fragments for each
 ## tool-deep-research
 
 - Domain: `agent-tools`
-- Code: `src/codebuddy/tool-definitions/research-tools.ts`, `src/tools/registry/research-tools.ts`
+- Code: `src/codebuddy/tool-definitions/research-tools.ts`, `src/tools/registry/research-tools.ts`, `src/tools/deep-research-tool.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/codebuddy/tool-definitions/research-tools.ts` contains code fragment `name: 'deep_research'`.
 - Entrypoint check: `src/tools/registry/research-tools.ts` contains code fragment `createResearchTools`.
 - Entrypoint check: `src/tools/registry/interactive-adapters.ts` contains code fragment `...createResearchTools()`.
-- Live limit: Requires a configured runtime or external service and a real agent turn.
+- Live trace: [p8-tool-deep-research.log](p8-tool-deep-research.log).
 
 ## tool-verify
 
@@ -554,7 +554,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/codebuddy/tool-definitions/verify-tools.ts` contains code fragment `name: 'verify'`.
 - Entrypoint check: `src/tools/registry/verify-tools.ts` contains code fragment `createVerifyTools`.
 - Entrypoint check: `src/tools/registry/interactive-adapters.ts` contains code fragment `...createVerifyTools()`.
-- Live limit: Requires a configured runtime or external service and a real agent turn.
+- Live limit: The independent verifier requires a live LLM/tool bridge and an executed oracle. No complete verifier delegation was observed in this campaign.
 
 ## tool-image-generate
 
@@ -564,7 +564,7 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/codebuddy/tool-definitions/multimodal-tools.ts` contains code fragment `name: 'image_generate'`.
 - Entrypoint check: `src/tools/registry/multimodal-tools.ts` contains code fragment `createMultimodalTools`.
 - Entrypoint check: `src/tools/registry/interactive-adapters.ts` contains code fragment `...createMultimodalTools()`.
-- Live limit: Requires a configured runtime or external service and a real agent turn.
+- Live limit: No isolated ComfyUI endpoint or image-provider credential was configured; no bitmap generation completed.
 
 ## tool-video-generate
 
@@ -574,17 +574,17 @@ This audit lists the checked source files and executable code fragments for each
 - Entrypoint check: `src/codebuddy/tool-definitions/multimodal-tools.ts` contains code fragment `name: 'video_generate'`.
 - Entrypoint check: `src/tools/registry/multimodal-tools.ts` contains code fragment `createMultimodalTools`.
 - Entrypoint check: `src/tools/registry/interactive-adapters.ts` contains code fragment `...createMultimodalTools()`.
-- Live limit: Requires a configured runtime or external service and a real agent turn.
+- Live limit: No isolated ComfyUI video endpoint or xAI/Fal credential was configured; no video generation completed.
 
 ## tool-understand-video
 
 - Domain: `media`
-- Code: `src/codebuddy/tool-definitions/multimodal-tools.ts`, `src/tools/registry/multimodal-tools.ts`
+- Code: `src/codebuddy/tool-definitions/multimodal-tools.ts`, `src/tools/registry/multimodal-tools.ts`, `src/tools/video/video-understanding.ts`, `src/tools/video/long-transcribe.ts`
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/codebuddy/tool-definitions/multimodal-tools.ts` contains code fragment `name: 'understand_video'`.
 - Entrypoint check: `src/tools/registry/multimodal-tools.ts` contains code fragment `createMultimodalTools`.
 - Entrypoint check: `src/tools/registry/interactive-adapters.ts` contains code fragment `...createMultimodalTools()`.
-- Live limit: Requires a configured runtime or external service and a real agent turn.
+- Live failure: [p8-tool-understand-video.log](p8-tool-understand-video.log).
 
 ## http-chat
 
@@ -626,7 +626,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `cowork/src/renderer/components/NewShell.tsx` contains code fragment `primaryView === 'studio'`.
 - Entrypoint check: `cowork/src/main/index.ts` contains code fragment `registerStudioFilesIpc(ipcMain)`.
-- Live limit: Electron UI and its external services were not run.
+- Live limit: The Cowork Electron dependencies and executable were absent from this checkout; App Studio was not launched in a real window.
 
 ## cowork-video-studio
 
@@ -635,7 +635,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `cowork/src/renderer/components/NewShell.tsx` contains code fragment `primaryView === 'videostudio'`.
 - Entrypoint check: `cowork/src/main/index.ts` contains code fragment `registerFilmIpc(ipcMain`.
-- Live limit: Electron UI and its external services were not run.
+- Live limit: The Cowork Electron dependencies and executable were absent from this checkout; Video Studio was not launched in a real window.
 
 ## agent-loop
 
@@ -660,7 +660,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/codebuddy/client.ts` contains code fragment `ProviderFailoverExhaustedError`.
 - Entrypoint check: `src/providers/provider-failover-policy.ts` contains code fragment `CODEBUDDY_PROVIDER_FALLBACK`.
-- Live limit: Needs a separate live scenario with its actual prerequisites.
+- Live limit: Only one local Ollama endpoint was authorized in the isolated HOME; no independent fallback provider was configured for a real failure handoff.
 
 ## provider-chatgpt-oauth
 
@@ -669,7 +669,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/codebuddy/client.ts` contains code fragment `new ChatGptResponsesProvider`.
 - Entrypoint check: `src/codebuddy/providers/provider-chatgpt-responses.ts` contains code fragment `class ChatGptResponsesProvider`.
-- Live limit: Needs a separate live scenario with its actual prerequisites.
+- Live limit: The isolated HOME has no ChatGPT OAuth login, and real credentials were not copied; no subscription request was made.
 
 ## provider-gemini-cli
 
@@ -678,7 +678,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/codebuddy/client.ts` contains code fragment `new GeminiCliProvider`.
 - Entrypoint check: `src/codebuddy/providers/provider-gemini-cli.ts` contains code fragment `class GeminiCliProvider`.
-- Live limit: Needs a separate live scenario with its actual prerequisites.
+- Live limit: The isolated HOME has no authenticated Gemini CLI session; the campaign used Ollama only.
 
 ## provider-agy-cli
 
@@ -687,7 +687,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/codebuddy/client.ts` contains code fragment `new AgyCliProvider`.
 - Entrypoint check: `src/codebuddy/providers/provider-agy-cli.ts` contains code fragment `class AgyCliProvider`.
-- Live limit: Needs a separate live scenario with its actual prerequisites.
+- Live limit: The isolated HOME has no authenticated AGY CLI session; the campaign used Ollama only.
 
 ## context-compaction
 
@@ -749,7 +749,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/sensory/speech-reaction.ts` contains code fragment `import('./voice-loop.js')`.
 - Entrypoint check: `src/sensory/voice-loop.ts` contains code fragment `sayNow`.
-- Live limit: Needs a separate live scenario with its actual prerequisites.
+- Live limit: No microphone capture was performed and the local faster_whisper STT module is absent; an audio-to-reply loop cannot be observed here.
 
 ## media-film-assemble
 
@@ -813,7 +813,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `src/index.ts` contains code fragment `registerEvolveCommands(program)`.
 - Entrypoint check: `src/commands/cli/evolve-command.ts` contains code fragment `.command('propose')`.
-- Live limit: No proposal was generated or executed.
+- Live limit: The isolated HOME has no vetted experiment fiche or matching scholarly discovery record; no proposal archive was generated.
 
 ## cowork-desktop-chat
 
@@ -822,7 +822,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `cowork/src/renderer/components/NewShell.tsx` contains code fragment `primaryView === 'chat'`.
 - Entrypoint check: `cowork/src/renderer/components/NewShell.tsx` contains code fragment `<DockWorkspace />`.
-- Live limit: Electron was not launched on this host.
+- Live limit: The Cowork Electron dependencies and executable were absent from this checkout; no desktop chat window was exercised.
 
 ## cowork-desktop-assistant
 
@@ -831,7 +831,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `cowork/src/renderer/components/NewShell.tsx` contains code fragment `primaryView === 'assistant'`.
 - Entrypoint check: `cowork/src/main/index.ts` contains code fragment `registerAssistantIpc(`.
-- Live limit: Electron and companion hardware were not launched.
+- Live limit: The Cowork Electron dependencies and executable were absent, and no microphone or camera session was opened.
 
 ## cowork-desktop-settings
 
@@ -840,7 +840,7 @@ This audit lists the checked source files and executable code fragments for each
 - Source status: coded `vrai`, wired `vrai`.
 - Entrypoint check: `cowork/src/renderer/App.tsx` contains code fragment `<SettingsPanel onClose=`.
 - Entrypoint check: `cowork/src/renderer/App.tsx` contains code fragment `import('./components/SettingsPanel')`.
-- Live limit: Electron was not launched on this host.
+- Live limit: The Cowork Electron dependencies and executable were absent from this checkout; no settings window was exercised.
 
 ## fleet-peer-sessions
 
