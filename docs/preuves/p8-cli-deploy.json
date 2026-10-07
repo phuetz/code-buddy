@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-deploy",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "c55d08cf725a26c20b77adc25b7497673a9b88058ee3ba660325d8181854d68e",
+  "artifact": "docs/preuves/p8-cli-deploy.log",
+  "summary": "fly.toml généré et présent sous le projet jetable."
+}

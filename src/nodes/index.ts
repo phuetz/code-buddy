@@ -14,7 +14,10 @@
 
 import { EventEmitter } from 'events';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { logger } from '../utils/logger.js';
+import { readJsonAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 
 // ============================================================================
 // Types
@@ -106,6 +109,7 @@ export interface CalendarListData {
 }
 
 export interface NodeManagerConfig {
+  persistPath?: string;
   pairingCodeLength: number;
   pairingTimeoutMs: number;
   heartbeatIntervalMs: number;
@@ -173,7 +177,42 @@ export class NodeManager extends EventEmitter {
       maxNodes: config?.maxNodes ?? 10,
       invocationTimeoutMs: config?.invocationTimeoutMs ?? 30_000,
       maxInvocationTimeoutMs: config?.maxInvocationTimeoutMs ?? 120_000,
+      ...(config?.persistPath ? { persistPath: config.persistPath } : {}),
     };
+    this.loadState();
+  }
+
+  private loadState(): void {
+    const file = this.config.persistPath;
+    if (!file) return;
+    const state = readJsonAtomicSync<{ pendingPairings?: NodePairingRequest[]; nodes?: NodeInfo[] } | null>(file, null, {
+      mode: 0o600,
+      isValid: (value): value is { pendingPairings?: NodePairingRequest[]; nodes?: NodeInfo[] } =>
+        Boolean(value && typeof value === 'object' && !Array.isArray(value)),
+    });
+    const now = Date.now();
+    for (const item of state?.pendingPairings ?? []) {
+      const expiresAt = new Date(item.expiresAt);
+      if (typeof item.code === 'string' && Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() > now) {
+        this.pendingPairings.set(item.code, { ...item, expiresAt });
+      }
+    }
+    for (const item of state?.nodes ?? []) {
+      if (typeof item.id !== 'string' || typeof item.name !== 'string') continue;
+      this.nodes.set(item.id, {
+        ...item, pairedAt: new Date(item.pairedAt), lastSeen: new Date(item.lastSeen), status: 'offline',
+      });
+    }
+  }
+
+  private saveState(): void {
+    const file = this.config.persistPath;
+    if (!file) return;
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+    writeJsonAtomicSync(file, {
+      pendingPairings: [...this.pendingPairings.values()].filter((item) => item.expiresAt.getTime() > Date.now()),
+      nodes: [...this.nodes.values()],
+    }, { mode: 0o600 });
   }
 
   static getInstance(config?: Partial<NodeManagerConfig>): NodeManager {
@@ -216,6 +255,7 @@ export class NodeManager extends EventEmitter {
     };
 
     this.pendingPairings.set(code, request);
+    this.saveState();
     logger.info(`Node pairing requested: ${name} (${platform}) — code: ${code}`);
     this.emit('pairing:requested', request);
 
@@ -229,6 +269,7 @@ export class NodeManager extends EventEmitter {
     }
     if (request.expiresAt < new Date()) {
       this.pendingPairings.delete(code);
+      this.saveState();
       throw new Error(`Pairing code ${code} has expired`);
     }
 
@@ -246,6 +287,7 @@ export class NodeManager extends EventEmitter {
     };
 
     this.nodes.set(nodeId, node);
+    this.saveState();
     logger.info(`Node paired: ${node.name} (${node.platform}) — id: ${nodeId}`);
     this.emit('node:paired', node);
 
@@ -276,6 +318,7 @@ export class NodeManager extends EventEmitter {
     if (node) {
       this.cancelNodeInvocations(nodeId, 'Node was removed');
       this.nodes.delete(nodeId);
+      this.saveState();
       logger.info(`Node removed: ${node.name} (${nodeId})`);
       this.emit('node:removed', node);
       return true;
