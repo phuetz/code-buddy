@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy package files
 COPY package*.json ./
+COPY vendor ./vendor
 
 # Install dependencies (including devDependencies for build)
 RUN npm ci
@@ -64,6 +65,7 @@ RUN useradd -m -s /bin/bash -u 1001 codebuddy
 # Copy built application from builder stage
 COPY --from=builder --chown=codebuddy:codebuddy /app/dist ./dist
 COPY --from=builder --chown=codebuddy:codebuddy /app/node_modules ./node_modules
+COPY --from=builder --chown=codebuddy:codebuddy /app/vendor ./vendor
 COPY --from=builder --chown=codebuddy:codebuddy /app/package.json ./
 
 # Create directories for config and data
@@ -115,6 +117,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy package files and install
 COPY package*.json ./
+COPY vendor ./vendor
 RUN npm ci
 
 # Copy source
