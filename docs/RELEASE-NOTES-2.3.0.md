@@ -52,4 +52,17 @@ Node.js 20 ou plus récent.
 
 ## Validation et limites connues
 
-@@VALIDATION@@
+- **CI de `main` du 07/10** : un seul job rouge, « Security Audit » (`scripts/ci-audit-gate.mjs`), à cause de cinq avis critiques (`simple-git`, `@simple-git/argv-parser`, `proxy-addr`, `node-llama-cpp`, `shell-quote`) et d'avis hauts non listés dont le SDK MCP (< 1.31.0). La branche d'audit des dépendances corrige quatre critiques ; `shell-quote` (1.12.0) et le SDK MCP (1.32.1) le sont par un commit de l'assemblage. La porte passe sur cette version : 0 critique, 27 avis hauts documentés. La CI complète de cette branche (Node 20 et 22, Ubuntu, Windows, macOS) n'a pas encore tourné : à lire sur la demande de fusion.
+- `npm run typecheck`, `npm run lint` (0 erreur, 2 602 avertissements) et `npm run build` : verts. Typecheck de Cowork : vert.
+- **Vitest, dépôt racine, 4 fragments (2 473 fichiers, 42 000 tests)** : dernier passage complet, 4 tests rouges. Deux sont déjà rouges sur `main` : `tests/hygiene/home-isolation` (variables XDG) et `tests/security/prenoms-code-public` (il exclut les noms de `git config user.name`, ici « t », qui est contenu dans presque tout le code). Deux sont des délais de 20 s dépassés sous une machine saturée (charge 46 sur 24 cœurs : `serv2-openai-usage`, `kyutai-local-voice`) ; ils passent 3 fois sur 3 isolés. Le fichier `screen-recorder` échoue si la session est Wayland (comportement voulu du code) et passe en session X11, comme sur la CI.
+- **Cowork** : 3 653 tests verts, 2 rouges déjà présents sur `main` (licence du verrou attendue MIT alors que le dépôt est sous BUSL-1.1 ; décompte des passerelles de protocole). Les tests touchés par le correctif Claude 5.5 passent.
+- **Harnais d'évaluation** : `eval/run-task.mjs`, 6 tâches sur 6 ; `eval/harness-benchmark.mjs`, 17 sur 17.
+- **Paquet npm** (`npm pack`, installation dans un dossier personnel vierge) : `buddy --version` donne 2.3.0, `buddy doctor` ne relève aucune erreur (22 contrôles passés, il sort en code 1 tant qu'aucun fournisseur n'est configuré), et deux vraies requêtes `buddy -p` avec un abonnement ChatGPT répondent (texte, puis lecture d'un fichier par un appel d'outil).
+- **Non vérifié** : un appel réel à l'API Anthropic avec les modèles 5.5 (aucune clé dans l'environnement de l'assemblage ; les essais de l'auteur du correctif et les rejeux de fixtures sont la seule preuve), le banc Codex et qwen sur la machine Windows, les essais de bout en bout de Cowork, l'extension VS Code, l'installation sous macOS et Windows.
+
+### Limites connues
+
+- Un secret suivi par Git peut encore être lu par une commande shell qui lit les objets du dépôt : la garantie est reportée en 2.3.1 (voir la section Sécurité du changelog).
+- Reportés en 2.3.1 : les correctifs de sécurité du service mobile (relecture « à corriger » : un jeton d'appareil absent du magasin est accepté par `/desktop`) et les tarifs de la gamme Claude 5.5 (absents de la table des prix : l'estimation de coût utilise le prix d'un modèle inconnu).
+- Le bac à sable natif reste optionnel ; sous Landlock il refuse la commande plutôt que de masquer les sockets.
+- Le catalogue des fonctionnalités et les notes précédentes restent la référence pour les limites des fonctions optionnelles de « Code Buddy 2 ».
