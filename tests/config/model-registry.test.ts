@@ -2,6 +2,7 @@
  * Tests for ModelRegistry — Sprint 2 of Model Architecture refactor.
  */
 
+import { MODEL_DEFAULTS, MODEL_ROLES } from '../../src/config/model-defaults.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ModelRegistry, getModelRegistry, resetModelRegistry } from '../../src/config/model-registry.js';
 
@@ -100,9 +101,9 @@ describe('ModelRegistry', () => {
 
   describe('resolveAlias', () => {
     it('should resolve built-in aliases', () => {
-      expect(registry.resolveAlias('sonnet')).toBe('claude-sonnet-4-20250514');
-      expect(registry.resolveAlias('opus')).toBe('claude-opus-4-6');
-      expect(registry.resolveAlias('haiku')).toBe('claude-haiku-4-5-20251001');
+      expect(registry.resolveAlias('sonnet')).toBe(MODEL_DEFAULTS.anthropic);
+      expect(registry.resolveAlias('opus')).toBe(MODEL_ROLES.architect.anthropic);
+      expect(registry.resolveAlias('haiku')).toBe(MODEL_ROLES.fast.anthropic);
       expect(registry.resolveAlias('gpt4')).toBe('gpt-4o');
       expect(registry.resolveAlias('gpt-5.6')).toBe('gpt-5.6-sol');
       expect(registry.resolveAlias('gemini')).toBe('gemini-2.5-flash');
@@ -110,8 +111,8 @@ describe('ModelRegistry', () => {
     });
 
     it('should be case-insensitive', () => {
-      expect(registry.resolveAlias('SONNET')).toBe('claude-sonnet-4-20250514');
-      expect(registry.resolveAlias('Opus')).toBe('claude-opus-4-6');
+      expect(registry.resolveAlias('SONNET')).toBe(MODEL_DEFAULTS.anthropic);
+      expect(registry.resolveAlias('Opus')).toBe(MODEL_ROLES.architect.anthropic);
     });
 
     it('should return input unchanged for unknown aliases', () => {
@@ -152,7 +153,7 @@ describe('ModelRegistry', () => {
     it('should return a map of all aliases', () => {
       const aliases = registry.getAliases();
       expect(aliases.size).toBeGreaterThan(0);
-      expect(aliases.get('sonnet')).toBe('claude-sonnet-4-20250514');
+      expect(aliases.get('sonnet')).toBe(MODEL_DEFAULTS.anthropic);
     });
   });
 });

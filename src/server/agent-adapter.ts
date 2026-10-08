@@ -1,3 +1,4 @@
+import { getAnthropicModel } from '../config/model-defaults.js';
 import type { ChatEntry, StreamingChunk } from '../agent/types.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import type { ContextManagerConversationState } from '../context/context-manager-v2.js';
@@ -141,7 +142,7 @@ export function listServerModels(): ServerModelInfo[] {
   if (detected?.provider === 'anthropic') {
     return [
       {
-        id: configuredModel || 'claude-sonnet-4-20250514',
+        id: configuredModel || getAnthropicModel(),
         object: 'model',
         created,
         owned_by: 'anthropic',

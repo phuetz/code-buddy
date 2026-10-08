@@ -5,6 +5,7 @@
  * memory scope, default workspace path). Presets can be applied to
  * the currently active session through the renderer.
  */
+import { ANTHROPIC_DEFAULT_MODEL } from '../../../shared/anthropic-models';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Save, Trash2, Layers, Play } from 'lucide-react';
@@ -223,7 +224,7 @@ export function SettingsWorkspacePresets() {
                   setDraft({ ...draft, model: ev.target.value });
                   setDirty(true);
                 }}
-                placeholder="claude-sonnet-4-6"
+                placeholder={ANTHROPIC_DEFAULT_MODEL}
                 className="w-full px-2 py-1.5 rounded-md bg-surface border border-border text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent font-mono"
               />
             </div>

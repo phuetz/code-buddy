@@ -276,7 +276,7 @@ export interface AgentDefaultsConfig {
 export interface AdvisorToolConfig {
   /** Whether the advisor tool is enabled (default: true) */
   enabled?: boolean;
-  /** Model to use for the advisor call (default: claude-opus-4-7) */
+  /** Model to use for the advisor call (default: the Anthropic architect model, claude-opus-5-5) */
   model?: string;
   /** Environment variable name for the API key (default: ANTHROPIC_API_KEY) */
   api_key_env?: string;

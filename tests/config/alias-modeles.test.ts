@@ -2,6 +2,7 @@
  * Alias résolus avant le catalogue.
  * Le profil de la machine n'est pas ouvert : textes fournis, ou répertoire temporaire.
  */
+import { MODEL_DEFAULTS } from '../../src/config/model-defaults.js';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -121,7 +122,7 @@ describe('alias intégrés surchargeables', () => {
 
   it('un alias vers sonnet suit la cible intégrée, puis la surcharge', () => {
     const integrated = startup('[model_aliases]\ncourt = "sonnet"\n', { cli: 'court' });
-    expect(integrated.model).toBe('claude-sonnet-4-20250514');
+    expect(integrated.model).toBe(MODEL_DEFAULTS.anthropic);
     const overridden = startup(
       '[model_aliases]\ncourt = "sonnet"\nsonnet = "grok-4"\n',
       { cli: 'court' },

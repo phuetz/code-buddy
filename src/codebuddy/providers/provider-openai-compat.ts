@@ -60,6 +60,14 @@ import {
   toOllamaNativeRequest,
   type OpenAiChatPayload,
 } from './ollama-native-transport.js';
+import {
+  adaptPayloadForAnthropic,
+  emptyAnthropicResponseError,
+  EmptyProviderResponseError,
+  isAnthropicEndpoint,
+  isEmptyChoice,
+  payloadWithoutRefusals,
+} from '../../providers/anthropic-compat.js';
 import type { Provider } from './provider-interface.js';
 import type { ActiveTurnMetrics, TurnMetricsRecorder } from '../../observability/turn-metrics.js';
 
@@ -754,9 +762,24 @@ export class OpenAICompatProvider implements Provider {
     if (!hasParts && (await this.ensureOllamaEndpoint()) && isOllamaNativeChatEnabled()) {
       return this.createOllamaNativeCompletion(openAiPayload, signal);
     }
-    return signal
-      ? await this.client.chat.completions.create(payload as ChatCompletionCreateParamsNonStreaming, { signal })
-      : await this.client.chat.completions.create(payload as ChatCompletionCreateParamsNonStreaming);
+    const send = async (body: ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming) =>
+      signal
+        ? await this.client.chat.completions.create(body as ChatCompletionCreateParamsNonStreaming, { signal })
+        : await this.client.chat.completions.create(body as ChatCompletionCreateParamsNonStreaming);
+    if (!isAnthropicEndpoint(this.baseURL)) return send(payload);
+    try {
+      return await send(payload);
+    } catch (error: unknown) {
+      // A parameter this model refuses (400 « … is deprecated for this model »,
+      // « "thinking.type.disabled" is not supported ») is dropped once and
+      // remembered per model; any other 400 reaches the caller untouched.
+      const status = (error as { status?: number } | null)?.status;
+      const retryPayload = status === 400
+        ? payloadWithoutRefusals(payload as unknown as Record<string, unknown>, this.baseURL, error instanceof Error ? error.message : String(error))
+        : null;
+      if (!retryPayload) throw error;
+      return send(retryPayload as unknown as ChatCompletionCreateParamsNonStreaming | ChatCompletionCreateParamsStreaming);
+    }
   }
 
   private async createOllamaNativeCompletion(
@@ -1018,6 +1041,11 @@ export class OpenAICompatProvider implements Provider {
       if (thinkingConfig.thinking) {
         requestPayload.thinking = thinkingConfig.thinking;
       }
+      adaptPayloadForAnthropic(requestPayload as unknown as Parameters<typeof adaptPayloadForAnthropic>[0], this.baseURL, {
+        temperature: opts.temperature,
+        explicitMaxTokens: opts.maxTokens,
+        thinking: thinkingConfig.thinking,
+      });
 
       if (opts.service_tier) {
         requestPayload.service_tier = opts.service_tier;
@@ -1080,6 +1108,16 @@ export class OpenAICompatProvider implements Provider {
         if (!Array.isArray(choices) || choices.length === 0) {
           throw new Error(EMPTY_PROVIDER_RESPONSE_ERROR);
         }
+        if (isAnthropicEndpoint(this.baseURL)) {
+          const first = choices[0] as { message?: { content?: unknown; tool_calls?: unknown }; finish_reason?: string | null };
+          if (isEmptyChoice(first.message)) {
+            throw emptyAnthropicResponseError({
+              model: requestPayload.model,
+              finishReason: first.finish_reason,
+              maxTokens: requestPayload.max_tokens,
+            });
+          }
+        }
         const codeBuddyResponse = response as unknown as CodeBuddyResponse;
         const rawUsage = (response as unknown as Record<string, unknown>).usage as Record<string, unknown> | undefined;
         if (rawUsage) {
@@ -1124,7 +1162,7 @@ export class OpenAICompatProvider implements Provider {
       const response = await performCall(finalMessages);
       return searchOmitted ? { ...response, searchHonored: false } : response;
     } catch (error: unknown) {
-      if (error instanceof CircuitOpenError) {
+      if (error instanceof CircuitOpenError || error instanceof EmptyProviderResponseError) {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -1238,6 +1276,11 @@ export class OpenAICompatProvider implements Provider {
         ...(opts.service_tier ? { service_tier: opts.service_tier } : {}),
         ...(opts.responseFormat === 'json' ? { response_format: { type: 'json_object' } } : {}),
       };
+      adaptPayloadForAnthropic(streamingPayload as unknown as Parameters<typeof adaptPayloadForAnthropic>[0], this.baseURL, {
+        temperature: opts.temperature,
+        explicitMaxTokens: opts.maxTokens,
+        thinking: thinkingConfig.thinking,
+      });
 
       metricsRecorder = opts.turnMetrics?.recorder;
       const ensureMeasuredTurn = (): void => {
@@ -1298,10 +1341,34 @@ export class OpenAICompatProvider implements Provider {
       }
 
       let yieldedChunks = 0;
+      let producedOutput = false;
+      let lastFinishReason: string | null | undefined;
       for await (const chunk of stream) {
         yieldedChunks++;
         observeChunk(chunk);
+        const choice = chunk.choices?.[0];
+        const delta = choice?.delta as { content?: unknown; tool_calls?: unknown[]; reasoning_content?: unknown } | undefined;
+        if (choice?.finish_reason) lastFinishReason = choice.finish_reason;
+        if (
+          (typeof delta?.content === 'string' && delta.content.length > 0)
+          || (Array.isArray(delta?.content) && delta.content.length > 0)
+          || (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0)
+          || (typeof delta?.reasoning_content === 'string' && delta.reasoning_content.length > 0)
+        ) {
+          producedOutput = true;
+        }
         yield searchOmitted ? { ...chunk, searchHonored: false } as SearchAwareChatCompletionChunk : chunk;
+      }
+
+      // Anthropic answers HTTP 200 with a role delta and `finish_reason: length`
+      // when adaptive thinking spent the whole budget: that is an error, not an
+      // empty success the agent would take for a finished turn.
+      if (yieldedChunks > 0 && !producedOutput && isAnthropicEndpoint(this.baseURL)) {
+        throw emptyAnthropicResponseError({
+          model: streamingPayload.model,
+          finishReason: lastFinishReason,
+          maxTokens: streamingPayload.max_tokens,
+        });
       }
 
       if (yieldedChunks === 0) {
@@ -1316,7 +1383,7 @@ export class OpenAICompatProvider implements Provider {
       }
       markMessageComplete();
     } catch (error: unknown) {
-      if (error instanceof CircuitOpenError) {
+      if (error instanceof CircuitOpenError || error instanceof EmptyProviderResponseError) {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);

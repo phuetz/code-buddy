@@ -316,7 +316,7 @@ describe('api config state helpers', () => {
     );
     expect(FALLBACK_PROVIDER_PRESETS.openai.models.map((item) => item.id)).not.toContain('gpt-5.2');
     expect(FALLBACK_PROVIDER_PRESETS.anthropic.models.map((item) => item.id)).toContain(
-      'claude-sonnet-4-6'
+      'claude-sonnet-5-5'
     );
     expect(FALLBACK_PROVIDER_PRESETS.gemini.models.map((item) => item.id)).toContain(
       'gemini-3.1-pro-preview'

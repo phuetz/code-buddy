@@ -2,6 +2,7 @@
  * Model validation and utility functions
  */
 
+import { getAnthropicModel } from '../config/model-defaults.js';
 import { SUPPORTED_MODELS } from '../config/constants.js';
 import { findModelToolConfig } from '../config/model-tools.js';
 import { ValidationError } from './errors.js';
@@ -93,7 +94,7 @@ export function getDefaultModel(provider: ModelProvider = 'xai'): string {
     case 'xai':
       return 'grok-4-latest';
     case 'anthropic':
-      return 'claude-opus-4-6';
+      return getAnthropicModel();
     case 'openai':
       return 'gpt-4o';
     case 'google':

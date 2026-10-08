@@ -1,3 +1,4 @@
+import { getAnthropicModel } from '../config/model-defaults.js';
 export interface FailoverEntry {
   provider: string;
   model: string;
@@ -113,7 +114,7 @@ export class ModelFailoverChain {
     if (process.env.ANTHROPIC_API_KEY) {
       chain.addProvider({
         provider: 'claude',
-        model: 'claude-sonnet-4-20250514',
+        model: getAnthropicModel(),
         apiKey: 'ANTHROPIC_API_KEY',
       });
     }

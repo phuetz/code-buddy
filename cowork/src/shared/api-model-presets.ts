@@ -1,3 +1,4 @@
+import { ANTHROPIC_DEFAULT_MODEL, ANTHROPIC_MODELS } from './anthropic-models';
 export type SharedProviderType =
   | 'chatgpt'
   | 'openrouter'
@@ -109,11 +110,7 @@ export const API_PROVIDER_PRESETS: SharedProviderPresets = {
     name: 'Anthropic',
     baseUrl: 'https://api.anthropic.com',
     models: [
-      { id: 'claude-opus-4-6', name: 'claude-opus-4-6' },
-      { id: 'claude-sonnet-4-6', name: 'claude-sonnet-4-6' },
-      { id: 'claude-haiku-4-5', name: 'claude-haiku-4-5' },
-      { id: 'claude-sonnet-4-5', name: 'claude-sonnet-4-5' },
-      { id: 'claude-3-7-sonnet-latest', name: 'claude-3-7-sonnet-latest' },
+      ...ANTHROPIC_MODELS.map((id) => ({ id, name: id })),
     ],
     keyPlaceholder: 'sk-ant-...',
     keyHint: 'Get it from console.anthropic.com.',
@@ -279,7 +276,7 @@ export const PI_AI_CURATED_PRESETS: Record<string, { piProvider: string; pick: s
   },
   anthropic: {
     piProvider: 'anthropic',
-    pick: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-3-7-sonnet-latest'],
+    pick: [...ANTHROPIC_MODELS],
   },
   openai: {
     piProvider: 'openai',
@@ -318,7 +315,7 @@ export function getModelInputGuidance(
 
   if (provider === 'custom') {
     return {
-      placeholder: 'glm-5, kimi-k2-thinking, claude-sonnet-4-6',
+      placeholder: `glm-5, kimi-k2-thinking, ${ANTHROPIC_DEFAULT_MODEL}`,
       hint: 'Use the exact model ID for the selected protocol or endpoint.',
     };
   }
@@ -368,7 +365,7 @@ export function getModelInputGuidance(
   }
 
   return {
-    placeholder: 'claude-sonnet-4-6, claude-opus-4-6',
+    placeholder: ANTHROPIC_MODELS.slice(0, 2).join(', '),
     hint: 'Use the exact model ID for the selected protocol or endpoint.',
   };
 }

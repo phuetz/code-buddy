@@ -1,0 +1,6 @@
+data: {"id":"msg_011CfpWTzCZSLprjfCzh1FKi","choices":[{"index":0,"delta":{"role":"assistant"}}],"created":1791450584,"model":"claude-haiku-5-5","object":"chat.completion.chunk"    }
+
+data: {"id":"msg_011CfpWTzCZSLprjfCzh1FKi","choices":[{"index":0,"delta":{},"finish_reason":"length"}],"created":1791450584,"model":"claude-haiku-5-5","object":"chat.completion.chunk"           }
+
+data: [DONE]
+

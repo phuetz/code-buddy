@@ -1,3 +1,4 @@
+import { getAnthropicModel } from './model-defaults.js';
 import type { ModelRouterConfig, TaskType } from '../utils/model-router.js';
 
 /** Versioned data only. USD per million uncached text tokens, standard API tier.
@@ -65,9 +66,9 @@ export const MODEL_PRICE_DATA: Record<string, { inputPerMillion: number; outputP
 export const UNKNOWN_MODEL_PRICE = { inputPerMillion: 3, outputPerMillion: 15 };
 
 export const MODEL_ALIASES: Record<string, string> = {
-  sonnet: 'claude-sonnet-4-20250514',
-  opus: 'claude-opus-4-6',
-  haiku: 'claude-haiku-4-5-20251001',
+  sonnet: getAnthropicModel(),
+  opus: getAnthropicModel('architect'),
+  haiku: getAnthropicModel('light'),
   gpt4: 'gpt-4o',
   'gpt-5.6': 'gpt-5.6-sol',
   gemini: 'gemini-2.5-flash',
@@ -82,9 +83,9 @@ export const TOML_MODEL_DATA: Record<string, { provider: string; model_id: strin
   'grok-4': { provider: 'xai', model_id: 'grok-4-latest', max_context_tokens: 256000, description: 'Grok 4 (256K context)' },
   'grok-code-fast': { provider: 'xai', model_id: 'grok-code-fast-1', max_context_tokens: 256000, description: 'Fast Grok model optimized for code' },
   'grok-3': { provider: 'xai', model_id: 'grok-3-latest', max_context_tokens: 131072, description: 'Full Grok 3 model' },
-  'claude-opus': { provider: 'anthropic', model_id: 'claude-opus-4-6', max_context_tokens: 200000, description: 'Claude Opus 4.6 (128K output)' },
-  'claude-sonnet': { provider: 'anthropic', model_id: 'claude-sonnet-4-5-20250929', max_context_tokens: 200000, description: 'Claude Sonnet 4.5 (64K output)' },
-  'claude-haiku': { provider: 'anthropic', model_id: 'claude-haiku-4-5-20251001', max_context_tokens: 200000, description: 'Claude Haiku 4.5 (64K output, fastest)' },
+  'claude-opus': { provider: 'anthropic', model_id: getAnthropicModel('architect'), max_context_tokens: 200000, description: 'Claude Opus (128K output)' },
+  'claude-sonnet': { provider: 'anthropic', model_id: getAnthropicModel(), max_context_tokens: 200000, description: 'Claude Sonnet (128K output)' },
+  'claude-haiku': { provider: 'anthropic', model_id: getAnthropicModel('light'), max_context_tokens: 200000, description: 'Claude Haiku (128K output, fastest)' },
   'gpt-5.6-sol': { provider: 'openai', model_id: 'gpt-5.6-sol', max_context_tokens: 1050000, description: 'GPT-5.6 Sol (1.05M context, 128K output, vision, max reasoning)' },
   'gpt-5': { provider: 'openai', model_id: 'gpt-5', max_context_tokens: 400000, description: 'GPT-5 (400K context, 128K output)' },
   'gpt-4o': { provider: 'openai', model_id: 'gpt-4o', max_context_tokens: 128000, description: 'GPT-4o' },

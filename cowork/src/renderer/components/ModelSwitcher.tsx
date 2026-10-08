@@ -1,6 +1,7 @@
 /**
  * ModelSwitcher — Dropdown for quick model selection in the chat header
  */
+import { ANTHROPIC_MODELS } from '../../shared/anthropic-models';
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Cpu } from 'lucide-react';
 
@@ -15,8 +16,7 @@ const POPULAR_MODELS = [
   { id: 'grok-3-mini-fast', label: 'Grok 3 Mini Fast', provider: 'xAI' },
   { id: 'grok-3-mini', label: 'Grok 3 Mini', provider: 'xAI' },
   { id: 'grok-3', label: 'Grok 3', provider: 'xAI' },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'Anthropic' },
-  { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'Anthropic' },
+  ...ANTHROPIC_MODELS.map((id) => ({ id, label: id, provider: 'Anthropic' })),
   { id: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI' },
   { id: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI' },
   { id: 'o3-mini', label: 'o3-mini', provider: 'OpenAI' },

@@ -594,7 +594,21 @@ const DEFAULT_MODEL_CONFIGS: ModelToolConfig[] = [
     supportsToolCalls: true,
     supportsVision: true,
     contextWindow: 200000,
-    maxOutputTokens: 64000,
+    maxOutputTokens: 128000,
+    patchFormat: 'search_replace',
+    promptProfile: 'rich',
+  },
+  // Claude Haiku 5.x: `GET /v1/models` (2026-10-08) says max_tokens 128000; a
+  // request at 128000 is accepted, 129000 answers 400. Context kept at the
+  // 200K ceiling of its siblings (the API's 1M window is not requested here).
+  {
+    model: 'claude-haiku-5*',
+    strengths: ['code', 'thinking'],
+    supportsReasoning: true,
+    supportsToolCalls: true,
+    supportsVision: true,
+    contextWindow: 200000,
+    maxOutputTokens: 128000,
     patchFormat: 'search_replace',
     promptProfile: 'rich',
   },

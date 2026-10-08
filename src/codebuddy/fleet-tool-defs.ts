@@ -58,7 +58,7 @@ export const PEER_DELEGATE_TOOL_DEF: CodeBuddyTool = {
         model: {
           type: 'string',
           description:
-            'Optional model hint for the peer (e.g. "grok-3", "claude-opus-4-5"). Peer may ignore.',
+            'Optional model hint for the peer (a provider model id, e.g. "grok-3"). Peer may ignore.',
         },
         dispatchProfile: {
           type: 'string',

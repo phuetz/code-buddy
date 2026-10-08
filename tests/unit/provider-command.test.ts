@@ -5,6 +5,7 @@
 
 // Mock logger
 
+import { MODEL_DEFAULTS } from '../../src/config/model-defaults.js';
 import { createProviderCommand } from '../../src/commands/provider';
 import { Command } from 'commander';
 import { logger } from '../../src/utils/logger';
@@ -273,7 +274,7 @@ describe('Provider Command', () => {
       const output = consoleLogSpy.mock.calls.map((c) => c.join(' ')).join('\n');
 
       expect(output).toContain('Models for Claude');
-      expect(output).toContain('claude-sonnet-4');
+      expect(output).toContain(MODEL_DEFAULTS.anthropic);
     });
 
     it('should list ChatGPT OAuth models', async () => {

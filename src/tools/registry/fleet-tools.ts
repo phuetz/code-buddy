@@ -93,7 +93,7 @@ export class PeerDelegateTool implements ITool {
           model: {
             type: 'string',
             description:
-              'Optional model hint for the peer (e.g. "grok-3", "claude-opus-4-5"). The peer may ignore if its config takes precedence.',
+              'Optional model hint for the peer (a provider model id, e.g. "grok-3"). The peer may ignore if its config takes precedence.',
           },
           dispatchProfile: {
             type: 'string',

@@ -218,7 +218,7 @@ export function extractImageReferences(text: string): { cleanText: string; image
 export function supportsVision(modelName: string): boolean {
   const visionModels = [
     'gpt-4-vision', 'gpt-4o', 'gpt-4-turbo',
-    'claude-3', 'claude-4',
+    'claude-3', 'claude-4', 'claude-opus', 'claude-sonnet', 'claude-haiku', 'claude-fable',
     'gemini-pro-vision', 'gemini-1.5', 'gemini-2',
     'grok-vision', 'grok-2',
     'llava', 'bakllava',

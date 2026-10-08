@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { getAnthropicModel } from './config/model-defaults.js';
 import { getOllamaBaseUrl, getOllamaV1BaseUrl } from './utils/ollama-url.js';
 // Record startup time as early as possible
 const STARTUP_TIME = Date.now();
@@ -421,7 +422,7 @@ function _detectProviderFromEnvLegacy(): DetectedProvider | null {
       provider: 'anthropic',
       apiKey: process.env.ANTHROPIC_API_KEY,
       baseURL: 'https://api.anthropic.com/v1',
-      defaultModel: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+      defaultModel: getAnthropicModel(),
     };
   }
 

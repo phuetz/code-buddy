@@ -5,6 +5,7 @@
  * Provides validation, documentation, and a CLI summary.
  */
 
+import { MODEL_DEFAULTS } from './model-defaults.js';
 import { getOllamaBaseUrl } from '../utils/ollama-url.js';
 import { hasCodexCredentials } from '../providers/codex-oauth.js';
 import {
@@ -454,7 +455,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   {
     name: 'ANTHROPIC_MODEL',
     type: 'string',
-    default: 'claude-sonnet-4-20250514',
+    default: MODEL_DEFAULTS.anthropic,
     description: 'Default Anthropic model',
     category: 'provider',
   },

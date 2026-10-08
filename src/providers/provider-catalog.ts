@@ -1,3 +1,4 @@
+import { ANTHROPIC_MODEL_CATALOG, MODEL_DEFAULTS } from '../config/model-defaults.js';
 import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 /**
  * Runtime provider catalog.
@@ -295,8 +296,8 @@ export const RUNTIME_PROVIDER_CATALOG: RuntimeProviderCatalogEntry[] = [
     baseUrlEnvKeys: ['ANTHROPIC_BASE_URL'],
     modelEnvKeys: ['ANTHROPIC_MODEL', 'CLAUDE_MODEL'],
     defaultBaseURL: 'https://api.anthropic.com/v1',
-    defaultModel: 'claude-sonnet-4-20250514',
-    models: ['claude-sonnet-4-20250514', 'claude-opus-4-20250514', 'claude-3-5-sonnet-latest'],
+    defaultModel: MODEL_DEFAULTS.anthropic,
+    models: [...ANTHROPIC_MODEL_CATALOG],
   },
   {
     id: 'mistral',

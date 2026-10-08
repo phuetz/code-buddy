@@ -1,3 +1,4 @@
+import { ANTHROPIC_MODEL_CATALOG } from '../config/model-defaults.js';
 import { getModelPricing } from '../config/model-pricing.js';
 
 /**
@@ -297,7 +298,7 @@ function parseConcurrency(raw: string | undefined): number | undefined {
 
 /** Representative Anthropic models the router knows about. */
 function buildAnthropicCatalog(): FleetModelDescriptor[] {
-  const ids = ['claude-opus-4', 'claude-sonnet-4', 'claude-haiku-4'];
+  const ids = [...ANTHROPIC_MODEL_CATALOG];
   return ids.map((id) => ({
     id,
     contextWindow: 200_000,

@@ -1,0 +1,1 @@
+{"error":{"code":"invalid_request_error","message":"\"thinking.type.disabled\" is not supported for this model. Use \"thinking.type.adaptive\" and \"output_config.effort\" to control thinking behavior.","type":"invalid_request_error","param":null}}

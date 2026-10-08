@@ -1,3 +1,4 @@
+import { ANTHROPIC_MODEL_CATALOG } from './model-defaults.js';
 import { DANGEROUS_COMMANDS } from '../security/dangerous-command-data.js';
 import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 /**
@@ -98,11 +99,9 @@ export const SUPPORTED_MODELS = {
   'grok-2-1212': { maxTokens: 32768, provider: 'xai' },
   'grok-2-vision-1212': { maxTokens: 32768, provider: 'xai' },
   // Claude models
-  'claude-opus-4-6': { maxTokens: 200000, provider: 'anthropic' },
-  'claude-sonnet-4-5-20250929': { maxTokens: 200000, provider: 'anthropic' },
-  'claude-haiku-4-5-20251001': { maxTokens: 200000, provider: 'anthropic' },
-  'claude-sonnet-4-20250514': { maxTokens: 200000, provider: 'anthropic' },
-  'claude-opus-4-20250514': { maxTokens: 200000, provider: 'anthropic' },
+  ...Object.fromEntries(
+    ANTHROPIC_MODEL_CATALOG.map(id => [id, { maxTokens: 200000, provider: 'anthropic' }]),
+  ),
   // Gemini models
   'gemini-2.5-flash': { maxTokens: 1000000, provider: 'google' },
   'gemini-2.5-pro': { maxTokens: 1000000, provider: 'google' },

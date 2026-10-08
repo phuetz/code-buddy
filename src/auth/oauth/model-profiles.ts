@@ -5,6 +5,7 @@
  * Automatically switches to backup providers when failures occur.
  */
 
+import { ANTHROPIC_MODEL_CATALOG, getAnthropicModel } from '../../config/model-defaults.js';
 import { getOllamaV1BaseUrl } from '../../utils/ollama-url.js';
 import { EventEmitter } from 'events';
 import * as crypto from 'crypto';
@@ -411,8 +412,8 @@ export class ModelProfileManager extends EventEmitter {
       apiKey: process.env.ANTHROPIC_API_KEY,
       baseUrl: 'https://api.anthropic.com',
       priority: 90,
-      models: ['claude-sonnet-4', 'claude-opus-4', 'claude-3-opus', 'claude-3-sonnet', 'claude-*'],
-      defaultModel: 'claude-sonnet-4',
+      models: [...ANTHROPIC_MODEL_CATALOG, 'claude-*'],
+      defaultModel: getAnthropicModel(),
       enabled: !!process.env.ANTHROPIC_API_KEY,
     });
 

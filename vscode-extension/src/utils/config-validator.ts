@@ -103,12 +103,23 @@ export function getApiKey(provider: string): string {
 }
 
 /**
+ * Claude models offered by the extension — the only place that names them.
+ * Fallback list: `GET https://api.anthropic.com/v1/models` is the source of truth
+ * (checked 2026-10-08: these three are served, `claude-sonnet-4-20250514` and
+ * every `claude-3-*` id answer 404).
+ */
+export const ANTHROPIC_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'] as const;
+
+/** Default Claude model; `ANTHROPIC_MODEL` or the `codebuddy.model` setting override it. */
+export const ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-5-5';
+
+/**
  * Get default model for provider
  */
 export function getDefaultModel(provider: string): string {
   const defaults: Record<string, string> = {
     grok: 'grok-3-latest',
-    claude: 'claude-sonnet-4-20250514',
+    claude: ANTHROPIC_DEFAULT_MODEL,
     openai: 'gpt-4o',
     ollama: 'llama3.2',
   };
