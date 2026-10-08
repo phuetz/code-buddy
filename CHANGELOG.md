@@ -1,15 +1,6 @@
 ## [Unreleased]
 
-### Corrigé
-
-- Les tâches auxiliaires (leçons et mémoire de fin de session, consolidation, classification, résumé) utilisent le fournisseur et le modèle de la session, ou un rôle explicite `CODEBUDDY_AUXILIARY_<ROLE>_PROVIDER`. Un login ChatGPT ne reçoit plus ces transcripts par défaut. `CODEBUDDY_LOCAL_ONLY` refuse une cible non locale. Voir `docs/fournisseur-auxiliaire.md`.
-- `buddy -p -m <modèle>` ne fait plus avaler `-m` par `-p`. Sans cela, le modèle n'était pas posé et toute la session partait vers le fournisseur détecté (ChatGPT OAuth s'il est connecté), tout en annonçant le modèle demandé.
-- **perf(cache) :** les résultats d'outils anciens ne sont plus réécrits à chaque tour. Leurs stubs ne portent plus d'âge (`[Tool result expired]`), chaque étape est idempotente, et l'expiration se fait par paliers (`CODEBUDDY_TOOL_TTL_STEP`, défaut 10 tours, 1 = à chaque tour). Avant, le plus ancien résultat changeait à chaque requête et le cache LLM restait bloqué au préfixe qui le précède (≈ 12 000 jetons, 30-45 % de taux sur 90 requêtes) ; contrepartie : un résultat est réduit au plus 9 tours plus tard.
-- Gamme Claude 5.5 (Haiku, Sonnet, Opus) : le défaut du fournisseur `anthropic` est `claude-sonnet-5-5` (remplaçable par `ANTHROPIC_MODEL` ou `CLAUDE_MODEL`) au lieu d'un modèle retiré qui répondait 404 ; `temperature`, `top_p` et `top_k` ne sont plus envoyés aux modèles qui les refusent (400 « deprecated ») ; un appel d'outil ne casse plus au deuxième tour (le type de l'appel était concaténé à chaque fragment de flux) ; une réponse vide (réflexion adaptative qui consomme `max_tokens`) est une erreur explicite qui nomme le budget au lieu d'un succès vide ; la réflexion étendue reste en `enabled`, seule forme acceptée par l'endpoint compatible OpenAI. `CODEBUDDY_ANTHROPIC_THINKING=disabled` coupe la réflexion quand le modèle le permet. Les catalogues de Cowork et de l'extension VS Code suivent.
-- Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
-- Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
-
-## [2.3.0] (2026-10-01)
+## [2.3.0] (2026-10-08)
 
 ### Sécurité
 
@@ -17,6 +8,35 @@
 - `buddy security audit` vérifie les réglages de sécurité du profil, des skills et de MCP ; son option `--fix` resserre les permissions des fichiers après sauvegarde des modes. Les audits incomplets ou portant sur des fichiers spéciaux échouent explicitement (`36fac9ed1`, `16aa191df`, `aed8b35c9`).
 - Un serveur MCP ne peut plus lancer librement un shell ni écrire hors des emplacements autorisés ; ses outils d'écriture doivent être explicitement listés (`0d9c5b2c9`, `48adb3f31`, `1d713a409`, `c7e4066ca`).
 - L'App Studio limite l'environnement transmis aux commandes et masque les clés dans la console, le chat et l'historique des versions (`a508f43d4`, `ec47c2103`, `5390cb1d2`).
+- **Bac à sable natif** (`CODEBUDDY_NATIVE_SANDBOX`, activé à la demande) : `bash` ne laisse plus joignables les sockets des moteurs de conteneurs (docker, containerd, podman, cri-o), équivalents root sur l'hôte. Sous Bubblewrap ils sont masqués ; sous Landlock, qui ne contrôle pas `connect()` sur un socket Unix, la commande est refusée quand un de ces sockets est joignable ; sous `sandbox-exec`, une règle interdit la connexion sortante vers eux. `/run/user` (bus de session, agents ssh et gpg), le bus système et `SSH_AUTH_SOCK` sont aussi masqués, et un fichier secret du dossier personnel (`.npmrc`) ne fait plus échouer tout le confinement. Limite : sans la variable, `bash` s'exécute comme avant, sans confinement (`777c32bf2`, `db148dd89`, `13cb35ca8`).
+- **Skills importés** : leurs scripts sont importés sans bit exécutable avec leur empreinte sha256, et les lancer par `bash` demande une confirmation explicite, refusée sans humain, avec l'empreinte recalculée juste avant le lancement. Binaires, archives, liens et scripts dangereux restent en quarantaine. La garde s'appuie sur l'analyseur shell réel (here-documents, here-strings, tubes, `source`, `coproc`, enveloppes à options, variables littérales, mots de commande non littéraux refusés) et couvre tous les outils d'exécution (`caa9dba39`, `fdf70e626`, `f4d7a8548`, `7f8d6f0e7`, `28d44dbb6`). Limite documentée : la frontière se limite au lancement direct d'un script du skill (`58e0dfc6e`).
+- **Dépendances** : la porte d'audit de la CI (`scripts/ci-audit-gate.mjs`) passe avec 0 avis critique et 27 avis hauts documentés dans `audit-allowlist.json`, chacun avec motif et échéance. Corrigés : `simple-git`, `proxy-addr`, `source-map-js` (`d5ed367c7`), le SDK MCP en 1.32.1 (GHSA-6qxp-vccf-f47h) et `shell-quote` en 1.12.0 (GHSA-pqg4-j6r4-53mv), cause de l'échec de la CI de `main` le 07/10 (`660ea68c7`).
+- **Confidentialité des appels auxiliaires** : les extractions de leçons et de mémoire, la consolidation, la classification et le résumé suivent le fournisseur de la session au lieu du login ChatGPT ; un rôle explicite `CODEBUDDY_AUXILIARY_<ROLE>_PROVIDER` reste possible et `CODEBUDDY_LOCAL_ONLY` refuse une cible distante (`064ff3a9c`, voir `docs/fournisseur-auxiliaire.md`).
+- Le paquet npm est refusé par un test s'il contient une carte des sources, un secret ou un chemin personnel (`ea17705a8`, `f946445c3`).
+
+### Correctifs
+
+- **Édition de fichiers** : `str_replace` et `multi_edit` échouent avec « N occurrences » au lieu de modifier la première en silence quand `old_str` apparaît plusieurs fois sans `replace_all` (stratégie exacte puis approchée) ; `old_str` vide, fichiers binaires, Unicode décalé et fins de ligne mélangées sont refusés ; le remplacement se fait à l'endroit trouvé. `apply_patch` est tout ou rien, conserve CRLF et BOM, et `Add File` n'écrase plus un fichier existant. Un banc de 35 cas de corruptions silencieuses échouait sur `main` (`847d8dc1a`, `88875ea54`, `6107c1bf4`, `c81eeb54b`, `52d3e1f56`, `ddd924287`).
+- **LM Resizer** : la sortie d'un outil est compressée avant d'être tronquée à ~100 Ko (une ligne d'erreur au milieu de 1,3 Mo n'est plus perdue), l'appel suit l'interface du sidecar 0.2.4 (CLI et HTTP), un échec reste visible partout et le magasin de récupération est privé (`0f4a856f8`, `f68101e9a`, `4a9389a1f`, `733674fbe`, `ac3b04b11`, `c3dd1c9c1`, `8db32a125`).
+- **Graphe de connaissances** : `buddy research` se termine avec le moteur Rust du graphe (le sidecar ne retient plus la sortie du processus) (`9d0a8bcd2`).
+- **Coût** : un appel payant n'est plus affiché « 0 $ forfait » ; seuls ChatGPT OAuth, Gemini CLI et Antigravity CLI sont des forfaits, le montant renvoyé par OpenRouter (`usage.cost`) prime sur la table, et le plafond de session n'est plus annulé par une URL de bouclage (`d145999dd`, `9f3e5afaf`, `168ecbb2c`).
+- **Boucle d'agent** : une boucle qui explore sans écrire reçoit un seul message de recentrage (30 appels sans écriture avec relecture, ou 60), le refus d'écriture hors espace de travail dit quoi faire, et la progression `-p` compte des tours et non des appels d'outils (plus de « 150 % (225/150) ») (`a1cfe1cb8`, `9398f5ff9`, `470569cd6`).
+- `buddy -p -m <modèle>` ne fait plus avaler `-m` par `-p` : sans cela, le modèle n'était pas posé et toute la session partait vers le fournisseur détecté (ChatGPT OAuth s'il est connecté), tout en annonçant le modèle demandé (`064ff3a9c`).
+- Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible. Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé, et le plafond est configurable jusqu'à 1 000 $.
+
+### Performance — cache
+
+- La date, le dossier de travail et la ligne `Project:` restent envoyés à chaque requête mais après le préfixe stable, et le contexte variable (date, dossier, mémoire, leçons, tâches) est ajouté à la fin, en ajout seul : le préfixe déjà envoyé ne change plus d'un tour à l'autre (`b544dc05e`, `62336a7f3`, `b506e637f`). Les jetons servis par le cache sont comptés dans le flux de réponse (`c111cb72b`).
+- Les résultats d'outils anciens ne sont plus réécrits à chaque tour : leurs stubs ne portent plus d'âge (`[Tool result expired]`), chaque étape est idempotente, et l'expiration se fait par paliers (`CODEBUDDY_TOOL_TTL_STEP`, défaut 10 tours, 1 = à chaque tour). Avant, le plus ancien résultat changeait à chaque requête et le cache restait bloqué au préfixe qui le précède (≈ 12 000 jetons) ; contrepartie : un résultat est réduit au plus 9 tours plus tard (`8f10ad2df`).
+- Mesure : @@CACHE@@
+
+### Compatibilité Claude 5.5
+
+- Le modèle par défaut du fournisseur `anthropic` est `claude-sonnet-5-5` (remplaçable par `ANTHROPIC_MODEL` ou `CLAUDE_MODEL`) au lieu d'un modèle retiré qui répondait 404 ; les catalogues de repli, ceux de Cowork et de l'extension VS Code suivent la gamme 5.5 (`9d0416aaf`, `935ecc37c`, `6e1a697f7`).
+- `temperature`, `top_p` et `top_k` ne sont plus envoyés aux modèles qui les refusent (400 « deprecated ») (`cd0afc224`).
+- Un appel d'outil ne casse plus au deuxième tour : le type de l'appel était concaténé à chaque fragment de flux (`6c30fde0b`).
+- Une réponse vide (réflexion adaptative qui consomme `max_tokens`) est une erreur explicite qui nomme le budget au lieu d'un succès vide ; la réflexion étendue reste en `enabled`, seule forme acceptée par l'endpoint compatible OpenAI. `CODEBUDDY_ANTHROPIC_THINKING=disabled` coupe la réflexion quand le modèle le permet (`cd0afc224`).
+- Limite : les tarifs Claude 5.5 ne sont pas dans la table des prix (repli « modèle inconnu ») ; ils sont reportés en 2.3.1. Les essais réels contre l'API Anthropic ont été faits par l'auteur du correctif sur Haiku 5.5 et Sonnet 5.5 ; ils sont à rejouer à la relecture.
 
 ### Premier contact et commandes
 

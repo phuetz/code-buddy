@@ -12,7 +12,7 @@ Les invariants opératoires non-négociables sont :
 - Jamais de secret en clair dans les fichiers suivis (utiliser variables d'environnement ou SecretRef).
 - HOME isolé pour les tests sous `_qa/<mission>/home` (gitignoré).
 
-> **Status: candidat 2.3.0 « Code Buddy 2 »** (`package.json`; dernier tag publié v2.2.0). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you _can't_ derive by reading the source.
+> **Status: version 2.3.0 « Code Buddy 2 »** (`package.json`; la publication — tag, release, npm — revient au propriétaire du dépôt). Multi-AI **fleet hub** (`peer.chat` + `peer.chat-session.*` + `peer.tool.invoke`) and the **Cowork** Electron GUI are the headline V1 features. ~27K Vitest tests. Read [`docs/getting-started.md`](docs/getting-started.md), [`docs/fleet-guide.md`](docs/fleet-guide.md), and [`CHANGELOG.md`](CHANGELOG.md). Keep this file short — it should capture what you _can't_ derive by reading the source.
 
 ## Build, Test, Lint
 

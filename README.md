@@ -51,8 +51,9 @@ Code Buddy combines a terminal coding agent with cloud, gateway and local model 
 query-selected tools, and the following interfaces. Optional services require their documented
 configuration; enabling a feature does not replace its permission checks.
 
-For changes planned for 2.3.0, see the [changelog](CHANGELOG.md). The
-[2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md) describe the last published
+For the changes in 2.3.0, see the [changelog](CHANGELOG.md) and the
+[2.3.0 release notes](docs/RELEASE-NOTES-2.3.0.md) (in French). The
+[2.2.0 release notes](docs/RELEASE-NOTES-2.2.0.md) describe the previous
 version and its integration limits.
 
 - **A multi-AI fleet hub.** Peers running `buddy server` observe each other's events and call each
@@ -270,9 +271,10 @@ to Apache 2.0 on 2030-08-31. Bundled Python skills stay MIT (see their `SKILL.md
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)** — first run, headless mode, sessions.
-- **[Changelog](CHANGELOG.md)** — 2.3.0 candidate and earlier changes.
-- **[2.3.0 preview and limits](docs/whats-new-2.3.md)** — behavior and boundaries of the candidate.
-- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — last published release and validation limits.
+- **[Changelog](CHANGELOG.md)** — 2.3.0 and earlier changes.
+- **[Release notes 2.3.0](docs/RELEASE-NOTES-2.3.0.md)** — what changed, proofs and known limits (French).
+- **[2.3.0 features and limits](docs/whats-new-2.3.md)** — behavior and boundaries of the new features.
+- **[Release notes 2.2.0](docs/RELEASE-NOTES-2.2.0.md)** — previous release and validation limits.
 - **[Release notes 2.1.0](docs/RELEASE-NOTES-2.1.0.md)** — previous release.
 - [Release notes 2.0.0](docs/RELEASE-NOTES-2.0.0.md) — previous major release.
 - [Install](docs/install.md) — published npm, Docker/VPS, the one-command installer.

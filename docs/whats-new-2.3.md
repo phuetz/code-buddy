@@ -1,7 +1,7 @@
 # Code Buddy 2.3 — What landed, and what it does not do
 
-These release notes document the features and fixes integrated for the upcoming **2.3.0** release on top of published **2.2.0**.
-The repository is prepared with `package.json` at 2.3.0; publication remains pending.
+These notes document the features and their limits in **2.3.0**, on top of **2.2.0**.
+The full list of changes is in the [changelog](../CHANGELOG.md) and the [release notes](RELEASE-NOTES-2.3.0.md) (French).
 
 | Feature / Topic | Area | Documentation |
 |:----------------|:-----|:--------------|
