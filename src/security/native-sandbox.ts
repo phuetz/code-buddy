@@ -557,7 +557,10 @@ export function probeRuntimeSocketsFromSandbox(
   const existsSync = io.existsSync ?? realExistsSync;
   const candidates = [...KNOWN_RUNTIME_SOCKETS, ...userRuntimeSockets(io.env ?? process.env)].filter((sock) => existsSync(sock));
   if (candidates.length === 0) return { visible: [] };
-  const script = `for s in ${candidates.map((sock) => `'${sock.replace(/'/g, `'\\''`)}'`).join(' ')}; do if [ -S "$s" ]; then echo "$s"; fi; done`;
+  // Guillemets simples du shell : pas de gabarit imbriqué ici, l'analyseur de code du catalogue
+  // (src/catalog/status.ts) ne sait pas le lire et perdrait toute la suite du fichier.
+  const shellQuote = (sock: string): string => "'" + sock.split("'").join("'\\''") + "'";
+  const script = `for s in ${candidates.map(shellQuote).join(' ')}; do if [ -S "$s" ]; then echo "$s"; fi; done`;
   const argv = buildBwrapArgv({ ...policy, network: false }, ['/bin/sh', '-c', script]);
   const key = `${bwrapPath}\0${argv.join('\0')}`;
   if (probeOkCache.has(key)) return { visible: [] };
