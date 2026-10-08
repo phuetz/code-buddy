@@ -121,7 +121,7 @@ function getApiKey(provider) {
 function getDefaultModel(provider) {
     const defaults = {
         grok: 'grok-3-latest',
-        claude: 'claude-sonnet-4-20250514',
+        claude: 'claude-sonnet-5-5',
         openai: 'gpt-4o',
         ollama: 'llama3.2',
     };

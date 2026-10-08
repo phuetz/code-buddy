@@ -5,6 +5,7 @@
  */
 
 import * as vscode from 'vscode';
+import { ANTHROPIC_MODELS } from './utils/config-validator';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'loading';
 
@@ -12,8 +13,7 @@ const AVAILABLE_MODELS = [
   { label: '$(sparkle) grok-3-latest', description: 'Grok 3 (default)', model: 'grok-3-latest' },
   { label: '$(sparkle) grok-3-mini-latest', description: 'Grok 3 Mini', model: 'grok-3-mini-latest' },
   { label: '$(sparkle) grok-2-latest', description: 'Grok 2', model: 'grok-2-latest' },
-  { label: '$(sparkle) claude-sonnet-4-20250514', description: 'Claude Sonnet 4', model: 'claude-sonnet-4-20250514' },
-  { label: '$(sparkle) claude-3-5-sonnet-20241022', description: 'Claude 3.5 Sonnet', model: 'claude-3-5-sonnet-20241022' },
+  ...ANTHROPIC_MODELS.map(model => ({ label: `$(sparkle) ${model}`, description: `Claude (${model})`, model })),
   { label: '$(sparkle) gpt-4o', description: 'GPT-4o', model: 'gpt-4o' },
   { label: '$(sparkle) gpt-4o-mini', description: 'GPT-4o Mini', model: 'gpt-4o-mini' },
   { label: '$(sparkle) gemini-2.0-flash', description: 'Gemini 2.0 Flash', model: 'gemini-2.0-flash' },
@@ -89,8 +89,7 @@ export class StatusBarManager implements vscode.Disposable {
     if (model.startsWith('grok-3-mini')) return 'Grok 3 Mini';
     if (model.startsWith('grok-3')) return 'Grok 3';
     if (model.startsWith('grok-2')) return 'Grok 2';
-    if (model.includes('claude-sonnet-4')) return 'Claude Sonnet 4';
-    if (model.includes('claude-3-5-sonnet')) return 'Claude 3.5 Sonnet';
+    if (model.startsWith('claude-')) return model.replace(/^claude-/, 'Claude ');
     if (model.includes('gpt-4o-mini')) return 'GPT-4o Mini';
     if (model.includes('gpt-4o')) return 'GPT-4o';
     if (model.includes('gemini')) return 'Gemini';

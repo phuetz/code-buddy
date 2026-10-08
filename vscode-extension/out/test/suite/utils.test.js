@@ -121,7 +121,7 @@ suite('Config Validator', () => {
     });
     test('getDefaultModel should return correct defaults', () => {
         assert.strictEqual((0, config_validator_1.getDefaultModel)('grok'), 'grok-3-latest');
-        assert.strictEqual((0, config_validator_1.getDefaultModel)('claude'), 'claude-sonnet-4-20250514');
+        assert.strictEqual((0, config_validator_1.getDefaultModel)('claude'), 'claude-sonnet-5-5');
         assert.strictEqual((0, config_validator_1.getDefaultModel)('openai'), 'gpt-4o');
         assert.strictEqual((0, config_validator_1.getDefaultModel)('ollama'), 'llama3.2');
     });
