@@ -11,7 +11,7 @@
 
 import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import * as path from 'path';
-import fg from 'fast-glob';
+import fg from '../utils/safe-fast-glob.js';
 
 export interface BatchTask {
   id: string;

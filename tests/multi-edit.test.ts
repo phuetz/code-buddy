@@ -93,7 +93,7 @@ describe('MultiEditTool', () => {
       expect(content).toBe('111 222 333');
     });
 
-    it('should replace only first occurrence', async () => {
+    it('should refuse an ambiguous old_string (several occurrences)', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'foo bar foo baz foo');
 
@@ -101,9 +101,10 @@ describe('MultiEditTool', () => {
         { old_string: 'foo', new_string: 'XXX' },
       ]);
 
-      expect(result.success).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('3 occurrences');
       const content = await fs.readFile(filePath, 'utf-8');
-      expect(content).toBe('XXX bar foo baz foo');
+      expect(content).toBe('foo bar foo baz foo');
     });
 
     it('should return error for non-existent file', async () => {

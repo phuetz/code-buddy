@@ -56,14 +56,21 @@ export class ProgressTracker extends EventEmitter {
     if (this.completed === 0) return undefined;
     const elapsed = Date.now() - this.startTime;
     const avgTime = elapsed / this.completed;
-    const remaining = this.total - this.completed - this.failed;
+    // Clamp at 0: if callers ever report more completions than `total`,
+    // `remaining` must not go negative (would yield a negative ETA).
+    const remaining = Math.max(0, this.total - this.completed - this.failed);
     return Math.round(avgTime * remaining);
   }
 
   getProgress(): { percentage: number; completed: number; total: number; eta?: number } {
     const done = this.completed + this.failed;
+    // Never exceed 100%: numerator and denominator are both work units,
+    // but a defensive clamp keeps the counter honest if a caller drifts.
+    const percentage = this.total > 0
+      ? Math.min(100, Math.round((done / this.total) * 100))
+      : 0;
     return {
-      percentage: this.total > 0 ? Math.round((done / this.total) * 100) : 0,
+      percentage,
       completed: this.completed,
       total: this.total,
       eta: this.estimateETA(),

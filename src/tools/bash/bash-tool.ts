@@ -13,11 +13,13 @@
  * Self-healing can be disabled via --no-self-heal flag.
  */
 
+import { isLmResizerEnabled, resolveLmResizerMaxInputChars } from '../../context/lm-resizer-compressor.js';
 import { spawn, SpawnOptions, ChildProcess } from 'child_process';
 import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ToolResult } from '../../types/index.js';
 import { ConfirmationService } from '../../utils/confirmation-service.js';
+import { confirmImportedSkillScripts } from './imported-skill-guard.js';
 import { getSandboxManager } from '../../security/sandbox.js';
 import { getSelfHealingEngine, SelfHealingEngine } from '../../utils/self-healing.js';
 import { parseTestOutput, isLikelyTestOutput } from '../../utils/test-output-parser.js';
@@ -158,6 +160,9 @@ export class BashTool implements Disposable {
       getSandboxManager: () => this.sandboxManager,
       getRunningProcesses: () => this.runningProcesses,
       refuseUnconfinedEscalation: options?.refuseUnconfinedEscalation === true,
+      // With lm-resizer enabled the whole output must reach it (head+tail of
+      // 256 KiB would drop the middle of a long log before any reduction).
+      ...(isLmResizerEnabled() ? { maxOutputBytes: resolveLmResizerMaxInputChars() } : {}),
     }, signal);
   }
 
@@ -445,10 +450,23 @@ export class BashTool implements Disposable {
         };
       }
 
+      // Scripts shipped by an imported skill are inert and never auto-approved.
+      const importedScripts = await confirmImportedSkillScripts(executionCommand, effectiveCwd);
+      if (importedScripts && !importedScripts.confirmed) {
+        return { success: false, error: importedScripts.error ?? 'Imported skill script not approved' };
+      }
+      // The approval (or allowlist entry) is bound to the file content: re-hash right before running.
+      const pinChanged = (): ToolResult | null => {
+        const changed = importedScripts?.verifyUnchanged() ?? null;
+        return changed ? { success: false, error: changed } : null;
+      };
+
       let requiresDirectApproval = policy.action === 'ask';
       let escalationReason = policy.reason;
 
       if (policy.action === 'sandbox') {
+        const changedBeforeSandbox = pinChanged();
+        if (changedBeforeSandbox) return changedBeforeSandbox;
         const sandboxed = await executeInWorkspaceSandbox(
           executionCommand,
           effectiveCwd,
@@ -531,6 +549,9 @@ export class BashTool implements Disposable {
           error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
         };
       }
+
+      const changedBeforeSpawn = pinChanged();
+      if (changedBeforeSpawn) return changedBeforeSpawn;
 
       // Checkpoint files targeted by destructive commands (rm, mv, etc.)
       this.checkpointDestructiveTargets(executionCommand);
@@ -725,6 +746,12 @@ export class BashTool implements Disposable {
       return { success: false, error: 'shellFreeExec: argv must be non-empty' };
     }
     const workDir = cwd ?? this.currentDirectory;
+    const importedScripts = await confirmImportedSkillScripts([cmd, ...args].join(' '), workDir);
+    if (importedScripts && !importedScripts.confirmed) {
+      return { success: false, error: importedScripts.error ?? 'Imported skill script not approved' };
+    }
+    const changedBeforeExec = importedScripts?.verifyUnchanged() ?? null;
+    if (changedBeforeExec) return { success: false, error: changedBeforeExec };
     const policyEnv = {
       ...getShellEnvPolicy().buildEnv(getFilteredEnv()),
       ...CONTROLLED_SUBPROCESS_ENV,

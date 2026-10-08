@@ -33,6 +33,7 @@ import { ToolResult } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { WorkspaceIsolation } from '../workspace/workspace-isolation.js';
 import { maybeReviewGatedWrite } from './review-gate-helper.js';
+import { binaryRefusalMessage, decodeStrictUtf8, usesCrlf } from '../utils/edit-safety.js';
 
 // ============================================================================
 // Types
@@ -323,85 +324,126 @@ function preflightPatchPaths(ops: FileOp[], cwd: string): PatchPathPreflight {
   return { paths, errors };
 }
 
+// ----------------------------------------------------------------------------
+// Résolution en mémoire (tout ou rien)
+// ----------------------------------------------------------------------------
+
 /**
- * Compute the FULL resulting content of every file the patch touches, without
- * writing anything — the input the diff-review gate needs. STRICTER than
- * `applyPatchOps` on purpose: any failed hunk or missing update target is an
- * error (a partially-resolved patch is not what the agent intended, so the
- * gated path fails closed instead of applying the hunks that happened to
- * match). Legacy ungated behavior is unchanged.
+ * Un fichier découpé en lignes SANS leur terminateur, avec le style de fin de
+ * ligne de chaque ligne conservée. Une ligne éditée prend le style dominant du
+ * fichier : sans cela, un fichier CRLF perdait le `\r` de la ligne modifiée.
  */
-export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd()): ComputedPatch {
-  const changes: ComputedPatch['changes'] = [];
-  const errors: string[] = [];
-
-  const preflight = preflightPatchPaths(ops, cwd);
-  if (preflight.errors.length > 0) {
-    return { changes, errors: preflight.errors };
-  }
-
-  for (const [index, op] of ops.entries()) {
-    const resolvedPaths = preflight.paths[index];
-    if (!resolvedPaths) {
-      errors.push(`Internal patch path resolution failure for: ${op.path}`);
-      continue;
-    }
-    const fullPath = resolvedPaths.source;
-    if (op.type === 'add') {
-      changes.push({ path: op.path, newContent: op.content ?? '' });
-      continue;
-    }
-    if (op.type === 'delete') {
-      // Legacy skips missing deletes silently — same here.
-      if (fs.existsSync(fullPath)) changes.push({ path: op.path, newContent: null });
-      continue;
-    }
-    // update
-    if (!fs.existsSync(fullPath)) {
-      errors.push(`File not found: ${op.path}`);
-      continue;
-    }
-    const fileLines = fs.readFileSync(fullPath, 'utf-8').split('\n');
-    let lineIndex = 0;
-    let failed = false;
-    for (const hunk of op.hunks ?? []) {
-      if (hunk.oldLines.length > 0) {
-        const seekIdx = seekSequence(fileLines, hunk.oldLines, lineIndex);
-        if (seekIdx >= 0) {
-          fileLines.splice(seekIdx, hunk.oldLines.length, ...hunk.newLines);
-          lineIndex = seekIdx + hunk.newLines.length;
-        } else {
-          errors.push(`Hunk failed in ${op.path}: "${hunk.oldLines[0]?.substring(0, 60)}..."`);
-          failed = true;
-        }
-      } else if (hunk.newLines.length > 0) {
-        fileLines.splice(lineIndex, 0, ...hunk.newLines);
-        lineIndex += hunk.newLines.length;
-      }
-    }
-    if (failed) continue;
-    const newContent = fileLines.join('\n');
-    if (op.moveTo) {
-      changes.push({ path: op.moveTo, newContent });
-      changes.push({ path: op.path, newContent: null });
-    } else {
-      changes.push({ path: op.path, newContent });
-    }
-  }
-  return { changes, errors };
+interface FileModel {
+  bom: boolean;
+  lines: string[];
+  /** `cr[i]` : la ligne i était terminée par CRLF (jamais vrai pour la dernière, sans terminateur). */
+  cr: boolean[];
+  crlf: boolean;
 }
 
-// ============================================================================
-// Applier
-// ============================================================================
+function parseFileModel(text: string): FileModel {
+  const bom = text.startsWith('\uFEFF');
+  const body = bom ? text.slice(1) : text;
+  const raw = body.split('\n');
+  const lines: string[] = [];
+  const cr: boolean[] = [];
+  raw.forEach((line, i) => {
+    const terminated = i < raw.length - 1;
+    const hasCr = terminated && line.endsWith('\r');
+    lines.push(hasCr ? line.slice(0, -1) : line);
+    cr.push(hasCr);
+  });
+  return { bom, lines, cr, crlf: usesCrlf(body) };
+}
 
-export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): PatchResult {
+function serializeFileModel(model: FileModel): string {
+  const last = model.lines.length - 1;
+  const body = model.lines
+    .map((line, i) => (i < last ? `${line}${model.cr[i] ? '\r' : ''}\n` : line))
+    .join('');
+  return model.bom ? `\uFEFF${body}` : body;
+}
+
+const stripCr = (line: string): string => line.replace(/\r$/, '');
+
+interface Overlay {
+  /** Contenu final (null = supprimé) ; `display` = chemin tel qu'écrit dans le patch. */
+  entries: Map<string, { display: string; content: string | null; existedOnDisk: boolean }>;
+}
+
+/**
+ * Lit l'état « virtuel » d'un fichier : ce que les opérations précédentes du
+ * même patch en ont fait, sinon le disque. Lève `Error(message)` si le fichier
+ * existe mais n'est pas du texte UTF-8.
+ */
+function readVirtual(overlay: Overlay, abs: string, display: string): string | null {
+  const known = overlay.entries.get(abs);
+  if (known) return known.content;
+  if (!fs.existsSync(abs)) return null;
+  const text = decodeStrictUtf8(fs.readFileSync(abs));
+  if (text === null) throw new Error(binaryRefusalMessage(display));
+  return text;
+}
+
+/** Existence virtuelle (sans décoder : un binaire existe, il peut être supprimé ou protégé). */
+function existsVirtual(overlay: Overlay, abs: string): boolean {
+  const known = overlay.entries.get(abs);
+  return known ? known.content !== null : fs.existsSync(abs);
+}
+
+function setVirtual(overlay: Overlay, abs: string, display: string, content: string | null): void {
+  const prev = overlay.entries.get(abs);
+  overlay.entries.set(abs, {
+    display,
+    content,
+    existedOnDisk: prev ? prev.existedOnDisk : fs.existsSync(abs),
+  });
+}
+
+/** Applique les hunks d'une mise à jour ; renvoie les erreurs (liste vide = succès). */
+function applyHunks(model: FileModel, hunks: Hunk[], display: string): string[] {
+  const errors: string[] = [];
+  let lineIndex = 0;
+  const asFileLines = (texts: string[]): string[] => texts.map(stripCr);
+  for (const hunk of hunks) {
+    const oldLines = asFileLines(hunk.oldLines);
+    const newLines = asFileLines(hunk.newLines);
+    if (oldLines.length > 0) {
+      const seekIdx = seekSequence(model.lines, oldLines, lineIndex);
+      if (seekIdx < 0) {
+        errors.push(`Hunk failed in ${display}: "${oldLines[0]?.substring(0, 60)}..."`);
+        continue;
+      }
+      model.lines.splice(seekIdx, oldLines.length, ...newLines);
+      model.cr.splice(seekIdx, oldLines.length, ...newLines.map(() => model.crlf));
+      lineIndex = seekIdx + newLines.length;
+    } else if (newLines.length > 0) {
+      model.lines.splice(lineIndex, 0, ...newLines);
+      model.cr.splice(lineIndex, 0, ...newLines.map(() => model.crlf));
+      lineIndex += newLines.length;
+    }
+  }
+  return errors;
+}
+
+interface ResolvedPatch {
+  overlay: Overlay;
+  result: PatchResult;
+}
+
+/**
+ * Résout TOUT le patch en mémoire, sans rien écrire. Toute erreur (hunk
+ * introuvable, fichier absent, binaire, Add File sur un fichier existant)
+ * est collectée : l'appelant n'écrit que si `result.errors` est vide.
+ */
+function resolvePatch(ops: FileOp[], cwd: string): ResolvedPatch {
   const result: PatchResult = { filesAdded: [], filesDeleted: [], filesUpdated: [], errors: [] };
+  const overlay: Overlay = { entries: new Map() };
 
   const preflight = preflightPatchPaths(ops, cwd);
   if (preflight.errors.length > 0) {
     result.errors.push(...preflight.errors);
-    return result;
+    return { overlay, result };
   }
 
   for (const [index, op] of ops.entries()) {
@@ -413,59 +455,105 @@ export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): Patch
     const fullPath = resolvedPaths.source;
     try {
       if (op.type === 'add') {
-        const dir = path.dirname(fullPath);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(fullPath, op.content ?? '');
+        if (existsVirtual(overlay, fullPath)) {
+          result.errors.push(`Add File refused: ${op.path} already exists (use Update File to modify it)`);
+          continue;
+        }
+        setVirtual(overlay, fullPath, op.path, op.content ?? '');
         result.filesAdded.push(op.path);
 
       } else if (op.type === 'delete') {
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
+        // Un Delete File sur un fichier absent est ignoré (comportement historique).
+        if (existsVirtual(overlay, fullPath)) {
+          setVirtual(overlay, fullPath, op.path, null);
           result.filesDeleted.push(op.path);
         }
 
       } else if (op.type === 'update') {
-        if (!fs.existsSync(fullPath)) {
+        const current = readVirtual(overlay, fullPath, op.path);
+        if (current === null) {
           result.errors.push(`File not found: ${op.path}`);
           continue;
         }
-        const fileLines = fs.readFileSync(fullPath, 'utf-8').split('\n');
-        let lineIndex = 0;
-
-        for (const hunk of op.hunks ?? []) {
-          if (hunk.oldLines.length > 0) {
-            const seekIdx = seekSequence(fileLines, hunk.oldLines, lineIndex);
-            if (seekIdx >= 0) {
-              fileLines.splice(seekIdx, hunk.oldLines.length, ...hunk.newLines);
-              lineIndex = seekIdx + hunk.newLines.length;
-            } else {
-              result.errors.push(`Hunk failed in ${op.path}: "${hunk.oldLines[0]?.substring(0, 60)}..."`);
-            }
-          } else if (hunk.newLines.length > 0) {
-            fileLines.splice(lineIndex, 0, ...hunk.newLines);
-            lineIndex += hunk.newLines.length;
-          }
+        const model = parseFileModel(current);
+        const hunkErrors = applyHunks(model, op.hunks ?? [], op.path);
+        if (hunkErrors.length > 0) {
+          result.errors.push(...hunkErrors);
+          continue;
         }
-
+        const newContent = serializeFileModel(model);
         if (op.moveTo) {
           const newPath = resolvedPaths.destination;
           if (!newPath) {
             result.errors.push(`Move destination was not resolved: ${op.moveTo}`);
             continue;
           }
-          const newDir = path.dirname(newPath);
-          if (!fs.existsSync(newDir)) fs.mkdirSync(newDir, { recursive: true });
-          fs.writeFileSync(newPath, fileLines.join('\n'));
-          fs.unlinkSync(fullPath);
+          if (newPath !== fullPath && existsVirtual(overlay, newPath)) {
+            result.errors.push(`Move refused: ${op.moveTo} already exists`);
+            continue;
+          }
+          setVirtual(overlay, newPath, op.moveTo, newContent);
+          if (newPath !== fullPath) setVirtual(overlay, fullPath, op.path, null);
           result.filesUpdated.push(`${op.path} → ${op.moveTo}`);
         } else {
-          fs.writeFileSync(fullPath, fileLines.join('\n'));
+          setVirtual(overlay, fullPath, op.path, newContent);
           result.filesUpdated.push(op.path);
         }
       }
     } catch (err) {
       result.errors.push(`${op.type} ${op.path}: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+  return { overlay, result };
+}
+
+/**
+ * Compute the FULL resulting content of every file the patch touches, without
+ * writing anything — the input the diff-review gate needs. Same resolver as
+ * `applyPatchOps`: any failed hunk, missing update target, binary file or
+ * Add File over an existing file is an error (a partially-resolved patch is
+ * not what the agent intended).
+ */
+export function computePatchedFiles(ops: FileOp[], cwd: string = process.cwd()): ComputedPatch {
+  const { overlay, result } = resolvePatch(ops, cwd);
+  if (result.errors.length > 0) return { changes: [], errors: result.errors };
+  const changes: ComputedPatch['changes'] = [];
+  for (const entry of overlay.entries.values()) {
+    if (entry.content === null && !entry.existedOnDisk) continue; // ajouté puis supprimé
+    changes.push({ path: entry.display, newContent: entry.content });
+  }
+  return { changes, errors: [] };
+}
+
+// ============================================================================
+// Applier
+// ============================================================================
+
+/**
+ * Applique un patch TOUT OU RIEN : le patch entier est résolu en mémoire
+ * d'abord ; à la moindre erreur rien n'est écrit et les erreurs sont rendues.
+ */
+export function applyPatchOps(ops: FileOp[], cwd: string = process.cwd()): PatchResult {
+  const { overlay, result } = resolvePatch(ops, cwd);
+  if (result.errors.length > 0) {
+    // Rien n'a été écrit : ne pas annoncer de succès partiels.
+    return { filesAdded: [], filesDeleted: [], filesUpdated: [], errors: result.errors };
+  }
+
+  try {
+    for (const [abs, entry] of overlay.entries) {
+      if (entry.content === null) {
+        if (fs.existsSync(abs)) fs.unlinkSync(abs);
+      } else {
+        const dir = path.dirname(abs);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(abs, entry.content);
+      }
+    }
+  } catch (err) {
+    // Échec d'E/S en cours d'écriture : on le dit, sans prétendre au succès.
+    result.errors.push(`write failed (patch may be partially applied): ${err instanceof Error ? err.message : String(err)}`);
+    return { filesAdded: [], filesDeleted: [], filesUpdated: [], errors: result.errors };
   }
   return result;
 }
@@ -566,9 +654,9 @@ export class ApplyPatchTool extends BaseTool {
     if (patchResult.filesUpdated.length > 0) lines.push(`Updated: ${patchResult.filesUpdated.join(', ')}`);
     if (patchResult.errors.length > 0) lines.push(`Errors: ${patchResult.errors.join('; ')}`);
     logger.debug(`apply_patch: +${patchResult.filesAdded.length} -${patchResult.filesDeleted.length} ~${patchResult.filesUpdated.length} !${patchResult.errors.length}`);
-    const onlyLine = lines[0];
-    return patchResult.errors.length > 0 && lines.length === 1 && onlyLine !== undefined
-      ? this.error(onlyLine)
+    // Toute erreur est un échec : le patch est appliqué en entier ou pas du tout.
+    return patchResult.errors.length > 0
+      ? this.error(lines.join('\n'))
       : this.success(lines.join('\n'));
   }
 }

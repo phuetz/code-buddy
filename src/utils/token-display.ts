@@ -7,6 +7,7 @@
 
 import { LOCAL_NO_COST_MODEL_IDS, SUBSCRIPTION_MODEL_IDS, UNKNOWN_MODEL_PRICE } from '../config/model-price-data.js';
 import { getPricingPer1k } from '../config/model-pricing.js';
+import type { CostBillingContext } from './cost-tracker.js';
 
 export interface TokenUsageInfo {
   inputTokens: number;
@@ -60,8 +61,21 @@ export function estimateCost(
   inputPricePer1k?: number,
   outputPricePer1k?: number,
   model?: string,
+  context?: CostBillingContext,
 ): number {
-  if (model && (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model))) return 0;
+  // Provider context is authoritative when present: a paid aggregator model
+  // (e.g. `deepseek/…` on OpenRouter) must not be zeroed out just because its
+  // slug matches a local-runtime prefix. The converse also holds: a loopback
+  // URL is not a tariff, so `localTarget` zeroes only a local-runtime slug.
+  // A priced model (`grok-3-latest`) keeps its table price and the session
+  // cost limit can still stop the loop.
+  const zeroCost = context
+    ? Boolean(
+      context.subscriptionAuth
+      || (context.localTarget && model && isLocalNoCostModel(model)),
+    )
+    : Boolean(model && (isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)));
+  if (zeroCost) return 0;
   const price = model ? getPricingPer1k(model) : {
     inputPer1k: UNKNOWN_MODEL_PRICE.inputPerMillion / 1000,
     outputPer1k: UNKNOWN_MODEL_PRICE.outputPerMillion / 1000,
@@ -79,6 +93,7 @@ function isChatGptSubscriptionModel(model: string): boolean {
 
 function isLocalNoCostModel(model: string): boolean {
   const m = model.toLowerCase();
+  if (m.includes('/') && !m.startsWith('ollama/')) return false;
   return LOCAL_NO_COST_MODEL_IDS.exact.includes(m)
     || LOCAL_NO_COST_MODEL_IDS.prefixes.some(prefix => m.startsWith(prefix));
 }

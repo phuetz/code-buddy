@@ -35,6 +35,7 @@ import {
   HEADLESS_LOCAL_COMPACT_MAX_TOKENS,
   isHeadlessPromptCompact,
 } from "../config/headless-local-prompt.js";
+import { splitVolatileSuffix } from "../prompts/cache-stable-prefix.js";
 
 export interface PromptBuilderConfig {
   yoloMode: boolean;
@@ -1081,17 +1082,19 @@ Output formatting discipline:
         systemPrompt = truncated.prompt;
       }
 
-      // Manus AI structured variation — shuffle reminder blocks to prevent
-      // the model from falling into brittle repetition patterns. It runs only
-      // after budget selection, so variation can reorder complete blocks but
-      // can never cause the truncator to cut one in half.
+      // Date, folder and the `Project:` line are pulled out before variation.
+      // Variation shuffles the tail; leaving them in would move the facts
+      // back into the cached prefix (or rephrase them). They are appended
+      // again afterwards, so the model still receives them on every request.
+      const detached = splitVolatileSuffix(systemPrompt);
+      let stablePrompt = detached.stable;
       if (gates.includeVariation) {
         try {
           const { varySystemPrompt } = await import('../prompts/variation-injector.js');
           // Use a daily seed so the variation is stable within a single day
           // (same day → same order → consistent cache), but rotates across days.
           const daySeed = Math.floor(Date.now() / 86_400_000);
-          systemPrompt = varySystemPrompt(systemPrompt, {
+          stablePrompt = varySystemPrompt(stablePrompt, {
             seed: daySeed,
             shuffleOrder: true,
             alternativePhrasing: true,
@@ -1101,6 +1104,9 @@ Output formatting discipline:
           // non-critical — proceed with original prompt
         }
       }
+      systemPrompt = detached.volatile
+        ? `${stablePrompt.replace(/[ \t\n]+$/, '')}\n\n${detached.volatile}`
+        : stablePrompt;
 
       // Cache system prompt for optimization
       this.promptCacheManager.cacheSystemPrompt(systemPrompt);

@@ -6,6 +6,7 @@ import { ToolResult, getErrorMessage } from "../types/index.js";
 import { getFilteredEnv } from "./bash/command-validator.js";
 import { SAFE_ENV_VARS } from "./bash/security-patterns.js";
 import { getShellEnvPolicy } from "../security/shell-env-policy.js";
+import { confirmImportedSkillCode } from "./bash/imported-skill-guard.js";
 import {
   getShellConfiguration,
   type ShellConfiguration,
@@ -201,6 +202,13 @@ export class InteractiveBashTool extends EventEmitter {
     if (validationError) {
       return { sessionId: '', output: `Error: ${validationError}` };
     }
+
+    const importedGuard = await confirmImportedSkillCode(command, options.cwd || process.cwd(), 'shell');
+    if (importedGuard && !importedGuard.confirmed) {
+      return { sessionId: '', output: `Error: ${importedGuard.error ?? 'Imported skill script not approved'}` };
+    }
+    const importedChanged = importedGuard?.verifyUnchanged() ?? null;
+    if (importedChanged) return { sessionId: '', output: `Error: ${importedChanged}` };
 
     const selectedConfiguration = getShellConfiguration();
     const shellConfiguration = selectedConfiguration.shell === 'bash'

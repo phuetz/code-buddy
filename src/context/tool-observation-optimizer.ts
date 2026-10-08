@@ -9,6 +9,7 @@
  * the recovery note.
  */
 
+import { annotateSuccessLines, failureHeaderFor } from './failure-view.js';
 import {
   isLmResizerEnabled,
   optimizeToolOutputWithLmResizer,
@@ -84,6 +85,8 @@ export interface ToolObservationInput {
   currentInputTokens?: number;
   responseReserveTokens?: number;
   compressErrors?: boolean;
+  /** The failure's real exit status is not known (the caller only knows "failed"): the header says `non-zero`. */
+  exitCodeUnknown?: boolean;
   alreadyOptimized?: boolean;
   signal?: AbortSignal;
 }
@@ -127,6 +130,8 @@ export interface ToolObservationOptimizerOptions {
   minSavingsBytes?: number;
   minSavingsRatio?: number;
   clientOptions?: LmResizerClientOptions;
+  /** Send large failed outputs to lm-resizer (default true); false keeps every failure raw. */
+  compressLargeFailures?: boolean;
   lmResizer?: LmResizerToolOutputRunner;
 }
 
@@ -274,7 +279,18 @@ export class ToolObservationOptimizer {
     }
 
     const failed = input.success === false || input.error !== undefined || (input.exitCode ?? 0) !== 0;
-    if (failed && input.compressErrors !== true) return plain('error-raw');
+    // A failed command stays raw when small (exact error text). A LARGE failed
+    // output is the case where the error sits in the middle of thousands of
+    // lines: it goes to lm-resizer WITHOUT --raw-on-failure, so its diagnostics
+    // filters keep the errors and the full original gets a CCR hash. The caller
+    // falls back to the raw text when lm-resizer is absent or does not reduce it.
+    const enabledForFailure = this.options.enabled ?? isLmResizerEnabled();
+    const compressLargeFailure = failed
+      && input.compressErrors !== true
+      && enabledForFailure
+      && (this.options.compressLargeFailures ?? true)
+      && originalBytes >= thresholdBytes;
+    if (failed && input.compressErrors !== true && !compressLargeFailure) return plain('error-raw');
 
     if (input.alreadyOptimized || rawContent.includes('[lm-resizer:')) {
       return plain('already-optimized');
@@ -292,7 +308,7 @@ export class ToolObservationOptimizer {
       query: input.query,
       exitCode: input.exitCode ?? (failed ? 1 : 0),
       tokenBudget: budget.tokenBudget,
-      rawOnFailure: failed && input.compressErrors !== true,
+      rawOnFailure: failed && input.compressErrors !== true && !compressLargeFailure,
       minSavingsBytes: this.options.minSavingsBytes ?? DEFAULT_MIN_SAVINGS_BYTES,
       minSavingsRatio: this.options.minSavingsRatio ?? DEFAULT_MIN_SAVINGS_RATIO,
     }, {
@@ -311,7 +327,12 @@ export class ToolObservationOptimizer {
       };
     }
 
-    const content = `${report.compressed}${recoveryNote(input.toolCallId, report)}`;
+    const failureExit: number | string = input.exitCodeUnknown
+      ? 'non-zero'
+      : input.exitCode !== undefined && input.exitCode !== 0 ? input.exitCode : 1;
+    const failureView = failed ? annotateSuccessLines(report.compressed, failureExit).text : report.compressed;
+    const failureHeader = failed ? failureHeaderFor(rawContent, failureView, failureExit) : '';
+    const content = `${failureHeader}${failureView}${recoveryNote(input.toolCallId, report)}`;
     const finalBytes = Buffer.byteLength(content);
     const originalTokens = estimateTokens(rawContent);
     const finalTokens = estimateTokens(content);
@@ -364,3 +385,5 @@ export async function optimizeToolObservation(
 ): Promise<ToolObservationOptimizationResult> {
   return getToolObservationOptimizer().optimize(input);
 }
+
+export { failureHeaderFor } from './failure-view.js';

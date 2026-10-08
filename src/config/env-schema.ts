@@ -580,7 +580,7 @@ export const ENV_SCHEMA: EnvVarDef[] = [
   providerStringEnv('OPENROUTER_PROVIDER_SORT', 'OpenRouter provider ranking: price, throughput, or latency'),
   providerStringEnv('OPENROUTER_PROVIDER_ONLY', 'Comma-separated OpenRouter sub-provider allowlist'),
   providerStringEnv('OPENROUTER_PROVIDER_IGNORE', 'Comma-separated OpenRouter sub-provider denylist'),
-  providerStringEnv('OPENROUTER_PROVIDER_ORDER', 'Comma-separated OpenRouter sub-provider priority order'),
+  providerStringEnv('OPENROUTER_PROVIDER_ORDER', 'Comma-separated OpenRouter sub-provider priority order. Optional; unset leaves routing unchanged. Pinning one sub-provider avoids a hop that drops the prompt cache.'),
   {
     name: 'OPENROUTER_PROVIDER_REQUIRE_PARAMETERS',
     type: 'boolean',

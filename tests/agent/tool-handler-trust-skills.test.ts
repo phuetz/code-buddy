@@ -133,6 +133,9 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
     });
     expect(result.success).toBe(false);
     expect(result.error ?? '').toContain(TRUST_ERROR);
+    // Bloquant 11: the refusal tells the model what to do instead of inviting it to edit the trust file.
+    expect(result.error ?? '').toContain('Write inside the project directory');
+    expect(result.error ?? '').not.toContain('trusted-folders');
   });
 
   it('STILL BLOCKS reading credential files elsewhere in ~/.codebuddy', async () => {
@@ -165,7 +168,7 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
     expect(result.error ?? '').toContain(TRUST_ERROR);
   });
 
-  it('points the user at a REAL recovery path (no dead-end /trust command)', async () => {
+  it('never tells the MODEL how to widen its own trust (no file, command or setting)', async () => {
     const handler = makeHandler();
     const result = await handler.executeTool({
       id: 'c5',
@@ -182,7 +185,11 @@ describe('ToolHandler trust gate — read-only skills exception', () => {
     // and must NOT direct the user to that dead-end command.
     expect(error).not.toContain('Use /trust');
     expect(error).not.toContain('/trust to');
-    expect(error).toContain('trusted-folders.json');
-    expect(error).toContain('Run Code Buddy from within that directory');
+    // Security (revue Grok, bloquant): the 04/10 agent edited the trust file 29 s
+    // after a refusal that named it. The operator recipe lives in the human docs.
+    expect(error).not.toMatch(/trusted-folders|trusted_folders|"folders"|\.codebuddy\/|--trust|\/trust\b/i);
+    expect(error).not.toMatch(/add it to|Run Code Buddy from within/i);
+    expect(error).toContain('decided by the human user');
+    expect(error).toContain('Write inside the project directory');
   });
 });

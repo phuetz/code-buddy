@@ -38,7 +38,10 @@ export class TurnLimitMiddleware implements ConversationMiddleware {
     if (context.toolRound === threshold) {
       return {
         action: 'warn',
-        message: `Approaching tool round limit (${context.toolRound}/${context.maxToolRounds}).`,
+        message:
+          `Approaching tool round limit (${context.toolRound}/${context.maxToolRounds}). ` +
+          'Wrap up now: stop exploring, write the requested deliverable (file at the requested path, commit if asked) ' +
+          'and give your final answer before the limit cuts the session off.',
       };
     }
 

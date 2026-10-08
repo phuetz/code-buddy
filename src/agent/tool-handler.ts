@@ -16,6 +16,7 @@
  * Tool instances are lazy-loaded on first access for optimal startup time.
  */
 
+import { isLmResizerEnabled } from '../context/lm-resizer-compressor.js';
 import { streamToolOutput } from '../tools/stream-tool-output.js';
 import {
   TextEditorTool,
@@ -1074,7 +1075,7 @@ export class ToolHandler {
           logger.info(`Tool blocked by trust folder: ${toolName}`, { path: targetPath });
           return {
             success: false,
-            error: `Path "${targetPath}" is not in a trusted directory. Run Code Buddy from within that directory, or add it to ~/.codebuddy/trusted-folders.json (the "folders" array).`,
+            error: `Path "${targetPath}" is not in a trusted directory. Write inside the project directory instead and name that path in your final answer, or state that the requested path was refused. Whether a folder is trusted is decided by the human user, never by you: do not look for, read or change any trust setting.`,
           };
         }
       }
@@ -1712,6 +1713,19 @@ export class ToolHandler {
         } catch (hookError) {
           logger.warn('Post-bash hook failed', { error: getErrorMessage(hookError) });
         }
+      }
+
+      // Streaming bash used to persist nothing before the after-hooks, so
+      // restore_context could only ever return the hook-cut text. With lm-resizer
+      // enabled, keep the native output exactly like executeTool does (flag off:
+      // unchanged, the executor persists what it sees).
+      if (toolCall.id && isLmResizerEnabled()) {
+        getRestorableCompressor().writeToolResult(
+          toolCall.id,
+          formatToolResultForRecovery(bashResult),
+          this.currentWorkingDirectory ?? process.cwd(),
+          this.recoverySessionIdForExecution(executionExtra),
+        );
       }
 
       const hookResult: ToolHookResult = {

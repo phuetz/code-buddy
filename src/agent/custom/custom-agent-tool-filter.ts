@@ -8,6 +8,9 @@
 
 import type { ToolFilterConfig } from '../../utils/tool-filter.js';
 import type { CustomAgentConfig } from './custom-agent-loader.js';
+import { TOOL_ALIASES } from '../../tools/registry/tool-alias-map.js';
+import { parseAgentTools, resolveAgentTool } from '../agent-tools.js';
+import { filterToolNames } from '../../utils/tool-filter.js';
 import { buildDispatchToolFilter } from '../../fleet/dispatch-profile.js';
 
 const EMPTY_FILTER: ToolFilterConfig = {
@@ -20,7 +23,7 @@ function unique(values: readonly string[]): string[] {
 }
 
 export function hasCustomAgentToolFilter(agent: CustomAgentConfig): boolean {
-  return Boolean(agent.tools?.length || agent.disabledTools?.length || agent.fleetDispatchProfile);
+  return Boolean(agent.tools !== undefined || agent.disabledTools?.length || agent.fleetDispatchProfile);
 }
 
 export function buildCustomAgentToolFilter(
@@ -28,8 +31,14 @@ export function buildCustomAgentToolFilter(
   existing: ToolFilterConfig = EMPTY_FILTER,
   availableTools: readonly string[] = [],
 ): ToolFilterConfig {
-  const agentEnabled = agent.tools ?? [];
-  const agentDisabled = agent.disabledTools ?? [];
+  // Programmatic configs must obey the same contract as files.
+  parseAgentTools(agent.tools);
+  parseAgentTools(agent.disabledTools, 'deny');
+  const agentEnabled = unique((agent.tools ?? []).flatMap(name => resolveAgentTool(name) === 'bash' ? ['bash', 'terminal', 'shell_exec', 'interactive_shell'] : [name]));
+  const rawDisabled = agent.disabledTools ?? [];
+  const names = [...Object.keys(TOOL_ALIASES), ...Object.values(TOOL_ALIASES), 'interactive_shell'];
+  const deniedEffects = new Set(filterToolNames(names, { enabledPatterns: rawDisabled, disabledPatterns: [] }).map(resolveAgentTool));
+  const agentDisabled = rawDisabled.length ? unique([...rawDisabled, ...names.filter(name => deniedEffects.has(resolveAgentTool(name)))]) : [];
   const profileFilter = agent.fleetDispatchProfile && availableTools.length > 0
     ? buildDispatchToolFilter(agent.fleetDispatchProfile, availableTools)
     : EMPTY_FILTER;
@@ -46,6 +55,7 @@ export function buildCustomAgentToolFilter(
       ...profileFilter.disabledPatterns,
       ...existing.disabledPatterns,
       ...agentDisabled,
+      ...(agent.tools?.length === 0 ? ['*'] : []),
     ]),
   };
 }

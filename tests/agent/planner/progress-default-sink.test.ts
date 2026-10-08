@@ -17,6 +17,7 @@ import {
   _resetForTests,
 } from '../../../src/agent/planner/progress-default-sink.js';
 import type { ProgressUpdate } from '../../../src/agent/planner/progress-tracker.js';
+import { logger } from '../../../src/utils/logger.js';
 
 beforeEach(() => {
   _resetForTests();
@@ -128,5 +129,45 @@ describe('progress-default-sink', () => {
     const b = getProgressTracker();
     expect(b).not.toBe(a);
     expect(b.listenerCount('progress')).toBe(0);
+  });
+
+  it('clamps percentage at 100% and never yields a negative ETA when updates exceed total', () => {
+    // Regression for the 2026-10-04 headless bug: a caller that reported one
+    // update per tool CALL against a total measured in ROUNDS produced
+    // "150% (... done, ETA ~-1162s)". The tracker must stay honest even if a
+    // caller drifts: percentage <= 100 and ETA >= 0.
+    const tracker = getProgressTracker();
+    tracker.start(2);
+    tracker.update('a', 'completed');
+    tracker.update('b', 'completed');
+    tracker.update('c', 'completed');
+
+    const progress = tracker.getProgress();
+    expect(progress.percentage).toBe(100);
+    expect(progress.eta).toBeGreaterThanOrEqual(0);
+  });
+
+  it('default sink never logs a >100% line even when updates exceed total', () => {
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+    try {
+      wireDefaultProgressSink();
+      const tracker = getProgressTracker();
+      tracker.start(2);
+      tracker.update('a', 'completed');
+      tracker.update('b', 'completed');
+      tracker.update('c', 'completed');
+
+      const progressLines = infoSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((line) => line.includes('[progress]'));
+      expect(progressLines.length).toBeGreaterThan(0);
+      for (const line of progressLines) {
+        const match = /\[progress\] (\d+)%/.exec(line);
+        expect(match).not.toBeNull();
+        expect(Number(match![1])).toBeLessThanOrEqual(100);
+      }
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 });

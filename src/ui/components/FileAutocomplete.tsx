@@ -10,7 +10,7 @@ import React, { useMemo } from 'react';
 import { Box, Text } from 'ink';
 import fs from 'node:fs';
 import path from 'node:path';
-import fg from 'fast-glob';
+import fg from '../../utils/safe-fast-glob.js';
 import ignore from 'ignore';
 import { useTheme } from '../context/theme-context.js';
 import { fuzzyMatch } from './FuzzyPicker.js';

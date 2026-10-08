@@ -19,6 +19,7 @@ import {
   parseSseStream,
   isFreshUserTurn,
   ChatGptResponsesProvider,
+  stableProjectPromptCacheKey,
 } from '../../../src/codebuddy/providers/provider-chatgpt-responses.js';
 import type { ChatGptAuth } from '../../../src/providers/codex-oauth.js';
 import type { ChatGptCodexModelCatalog } from '../../../src/providers/chatgpt-models.js';
@@ -707,6 +708,24 @@ function discoveredCatalog(): ChatGptCodexModelCatalog {
     ],
   };
 }
+
+describe('prompt_cache_key stable par projet', () => {
+  it('deux constructions du même dossier partagent la clé, un autre dossier non', () => {
+    const make = (projectDir: string) => new ChatGptResponsesProvider({
+      authProvider: async () => null,
+      model: 'gpt-5.5',
+      defaultMaxTokens: 1000,
+      projectDir,
+    });
+    const alpha = Reflect.get(make('/tmp/dossier-alpha'), 'promptCacheKey');
+    const alphaAgain = Reflect.get(make('/tmp/dossier-alpha'), 'promptCacheKey');
+    const beta = Reflect.get(make('/tmp/dossier-beta'), 'promptCacheKey');
+    expect(alpha).toBe(alphaAgain);
+    expect(alpha).toBe(stableProjectPromptCacheKey('/tmp/dossier-alpha'));
+    expect(alpha).toMatch(/^cb-project-[0-9a-f]{16}$/);
+    expect(beta).not.toBe(alpha);
+  });
+});
 
 describe('ChatGptResponsesProvider — chatStream wiring', () => {
   it('preserves response.incomplete as length and truncated in chat()', async () => {

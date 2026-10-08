@@ -13,6 +13,7 @@ import path from 'path';
 import { createHash, randomUUID } from 'crypto';
 import * as yaml from 'yaml';
 import { scanSkillFirewall } from '../security/skill-scanner.js';
+import { checkExecutablePayloads, disarmScripts, loadExecAllowlist, type ExecutableFile } from '../security/skill-executable-gate.js';
 import { logger } from '../utils/logger.js';
 import { readJsonAtomicSync, writeFileAtomicSync, writeJsonAtomicSync } from '../utils/atomic-write.js';
 import { getBundledSkillsPath } from './index.js';
@@ -216,9 +217,9 @@ function validateSkillName(name: string): void {
   if (!SAFE_NAME_RE.test(name)) throw new Error(`Invalid skill name: ${name}`);
 }
 
-// The skill firewall only scans SKILL.md/.ts/.js content; every other allowed
-// extension is inert data. Anything else (.sh, .py, extensionless executables…)
-// would ship unscanned under a "signed + firewalled" promise, so it is refused.
+// Keep the Exchange transport restricted to these formats. The directory
+// firewall scans every copied support file; an accepted suffix is never proof
+// of inert data. Other executable formats remain refused by the transport.
 const INERT_EXCHANGE_EXTENSIONS = new Set([
   '.md', '.markdown', '.txt', '.json', '.yaml', '.yml', '.toml', '.csv',
   '.ts', '.js', '.mjs', '.cjs',
@@ -371,7 +372,7 @@ export function listTrustedKeys(): TrustedExchangeKey[] {
   return readTrustedKeys().keys;
 }
 
-function validatePackage(packageDir: string): { manifest: ExchangeManifest; trusted: boolean } {
+function validatePackage(packageDir: string): { manifest: ExchangeManifest; trusted: boolean; unverifiedScripts: ExecutableFile[] } {
   const resolvedDir = path.resolve(packageDir);
   if (!fs.existsSync(resolvedDir) || !fs.statSync(resolvedDir).isDirectory()) {
     throw new Error(`Exchange package directory not found: ${packageDir}`);
@@ -412,12 +413,23 @@ function validatePackage(packageDir: string): { manifest: ExchangeManifest; trus
     throw new Error(`Skill firewall refused package (${firewall.verdict}): ${firewall.summary}`);
   }
 
+  // Same executable gate as `skills import`: a binary, archive or link refuses the package;
+  // scripts are installed inert and ask for a confirmation when run.
+  const gate = checkExecutablePayloads(resolvedDir, {
+    sourceRoot: resolvedDir,
+    source: 'exchange',
+    allowlist: () => loadExecAllowlist(),
+  });
+  if (gate.blocked) {
+    throw new Error(`Skill firewall refused package (quarantine): ${gate.reason}`);
+  }
+
   const trustStore = readTrustedKeys();
   const matching = trustStore.keys.find((key) => key.id === manifest.author);
   if (matching && matching.publicKey !== manifest.publicKey) {
     throw new Error(`Trusted-key identifier collision for ${manifest.author}`);
   }
-  return { manifest, trusted: matching !== undefined };
+  return { manifest, trusted: matching !== undefined, unverifiedScripts: gate.unverifiedScripts };
 }
 
 /** Export an authored or bundled local skill as a signed directory package. */
@@ -514,7 +526,7 @@ function readExchangeProvenance(destination: string): ExchangeProvenance | null 
   }
 }
 
-function writeExchangeProvenance(skillFile: string, name: string, author: string, installedAt: string, version: string): void {
+function writeExchangeProvenance(skillFile: string, name: string, author: string, installedAt: string, version: string, scripts: ExecutableFile[] = []): void {
   const content = fs.readFileSync(skillFile, 'utf-8');
   const match = content.match(FRONTMATTER_RE);
   if (!match) throw new Error('Installed SKILL.md is missing frontmatter');
@@ -530,6 +542,7 @@ function writeExchangeProvenance(skillFile: string, name: string, author: string
     version,
     installedAt,
     pinned: true,
+    ...(scripts.length ? { scriptsUnverified: true, scripts: scripts.map(f => ({ path: f.relPath, sourcePath: f.relPath, sha256: f.sha256 })) } : {}),
   };
   writeFileAtomicSync(skillFile, `---\n${yaml.stringify(metadata)}---\n\n${(match[2] ?? '').trim()}\n`);
 }
@@ -580,7 +593,9 @@ export async function installSkill(dir: string, options: InstallSkillOptions = {
     try {
       fs.mkdirSync(temporary, { recursive: true });
       copyFiles(path.resolve(dir), temporary, manifest.files.map((file) => file.path));
-      writeExchangeProvenance(path.join(temporary, 'SKILL.md'), name, manifest.author, installedAt, manifest.version);
+      writeExchangeProvenance(path.join(temporary, 'SKILL.md'), name, manifest.author, installedAt, manifest.version, validation.unverifiedScripts);
+      // Inert until a human approves a run (or allowlists it with source "exchange").
+      disarmScripts(temporary, validation.unverifiedScripts.map(f => f.relPath));
       fs.mkdirSync(destinationRoot, { recursive: true });
       if (fs.existsSync(destination)) {
         fs.renameSync(destination, backup);

@@ -28,6 +28,10 @@ import {
   _resetFleetRegistryForTests,
   type ActiveListenerEntry,
 } from '../../../src/fleet/fleet-registry.js';
+import {
+  getProgressTracker,
+  _resetForTests as _resetProgressTrackerForTests,
+} from '../../../src/agent/planner/progress-default-sink.js';
 
 // ---------------------------------------------------------------------------
 // Mock modules
@@ -2165,6 +2169,43 @@ describe('AgentExecutor', () => {
       expect(maxRoundChunk).toBeDefined();
     });
 
+    it('advances progress per tool ROUND, not per tool call', async () => {
+      // Regression for the 2026-10-04 headless bug: a round carrying two
+      // parallel calls reported completed=2 against total=1 (maxToolRounds),
+      // i.e. "150% (225/150 done, ETA ~-1162s)". Progress must count rounds.
+      _resetProgressTrackerForTests();
+      config.maxToolRounds = 1;
+      executor = new AgentExecutor(deps, config);
+
+      const callA = makeToolCall('read_file', { path: '/a.txt' }, 'call_a');
+      const callB = makeToolCall('read_file', { path: '/b.txt' }, 'call_b');
+
+      (deps.streamingHandler.getAccumulatedMessage as jest.Mock).mockReturnValue({
+        content: 'Running...',
+        tool_calls: [callA, callB],
+      });
+      (deps.streamingHandler.extractToolCalls as jest.Mock).mockReturnValue({
+        toolCalls: [],
+        remainingContent: '',
+      });
+      (deps.client.chatStream as jest.Mock).mockImplementation(async function* () {
+        yield { choices: [{ delta: { content: 'Run...' } }] };
+      });
+
+      await collectChunks(
+        executor.processUserMessageStream('Loop', [], [], null)
+      );
+
+      // Both calls ran, but only one round was consumed.
+      expect(deps.toolHandler.executeTool).toHaveBeenCalledTimes(2);
+      const progress = getProgressTracker().getProgress();
+      expect(progress.total).toBe(1);
+      expect(progress.completed).toBe(1);
+      expect(progress.percentage).toBeLessThanOrEqual(100);
+      expect(progress.eta ?? 0).toBeGreaterThanOrEqual(0);
+      _resetProgressTrackerForTests();
+    });
+
     it('should stop when cost limit reached in streaming mode', async () => {
       const toolCall = makeToolCall('bash', { command: 'echo test' }, 'call_1');
 
@@ -2787,6 +2828,7 @@ describe('AgentExecutor', () => {
       });
       expect(deps.client.chatStream).toHaveBeenCalledTimes(2);
       expect(messages.map((entry) => [entry.role, entry.content])).toEqual([
+        ['system', '<context type="lessons">\nPHASE_A_LESSONS_SENTINEL\n</context>'],
         ['assistant', 'Partial answer'],
         ['user', 'Redirect the answer'],
         ['assistant', 'Redirected answer'],
@@ -2933,8 +2975,10 @@ describe('AgentExecutor', () => {
 
       await executor.processUserMessage('start', [], messages);
 
-      // Round 1 sees one message; round 2 sees assistant call + result too.
-      expect(config.recordSessionCost).toHaveBeenCalledWith(1 + 3, 100);
+      // Round 1 sees the user message only (context is sealed after the count).
+      // Round 2 also sees that sealed lessons block, the assistant call and
+      // its result: 4 messages. Cumulative input is 1 + 4.
+      expect(config.recordSessionCost).toHaveBeenCalledWith(1 + 4, 100);
     });
 
     it('should record session cost after processing', async () => {

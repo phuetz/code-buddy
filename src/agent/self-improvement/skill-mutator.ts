@@ -161,9 +161,9 @@ export function scanAuthoredSkillContent(content: string): SkillFirewallCheck {
   try {
     const report = scanSkillFirewall(file);
     return {
-      safe: !report.quarantineRequired,
+      safe: report.verdict === 'allow',
       verdict: String(report.verdict),
-      reasons: report.quarantineRequired ? [report.summary] : [],
+      reasons: report.verdict !== 'allow' ? [report.summary] : [],
     };
   } catch (err) {
     return { safe: false, verdict: 'scan-error', reasons: [err instanceof Error ? err.message : String(err)] };

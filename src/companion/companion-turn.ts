@@ -91,7 +91,8 @@ async function defaultResolveProvider(
   env: NodeJS.ProcessEnv,
 ): Promise<CompanionTurnProvider | null> {
   const { resolveCommandProvider } = await import('../commands/llm-provider-resolution.js');
-  const resolved = resolveCommandProvider({});
+  const { overrideAuxiliaryCommandProvider } = await import('../providers/auxiliary-llm.js');
+  const resolved = overrideAuxiliaryCommandProvider('companion', resolveCommandProvider({}));
   if (!resolved) return null;
   const model = resolved.model || env.CODEBUDDY_MODEL || env.GROK_MODEL || '';
   if (!model) return null;

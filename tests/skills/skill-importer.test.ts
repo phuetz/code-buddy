@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import fs from 'fs';
+import { createHash } from 'crypto';
 import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
@@ -78,8 +79,13 @@ describe('skill-importer — discovery', () => {
     const home = tmp();
     const originalHome = process.env.HOME;
     const originalProfile = process.env.USERPROFILE;
+    const originalBuddyHome = process.env.CODEBUDDY_HOME;
+    const originalGrokHome = process.env.GROK_HOME;
     process.env.HOME = home;
     process.env.USERPROFILE = home;
+    // Exercise the fallback independently of the profile set by HOME isolation.
+    delete process.env.CODEBUDDY_HOME;
+    delete process.env.GROK_HOME;
     try {
       writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY);
 
@@ -93,6 +99,10 @@ describe('skill-importer — discovery', () => {
       else process.env.HOME = originalHome;
       if (originalProfile === undefined) delete process.env.USERPROFILE;
       else process.env.USERPROFILE = originalProfile;
+      if (originalBuddyHome === undefined) delete process.env.CODEBUDDY_HOME;
+      else process.env.CODEBUDDY_HOME = originalBuddyHome;
+      if (originalGrokHome === undefined) delete process.env.GROK_HOME;
+      else process.env.GROK_HOME = originalGrokHome;
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
@@ -318,17 +328,18 @@ describe('skill-importer — source-agnostic remap (OpenClaw + generic)', () => 
 describe('skill-importer — support files + conflicts', () => {
   it('copies support dirs and skips a conflict unless overwrite', async () => {
     writeSkill(path.join(src, 'git-helper'), BENIGN_FM, BENIGN_BODY, { 'scripts/helper.sh': 'echo hello\n', 'references/notes.md': '# notes' });
-    await importSkills(src, { destRoot: dest, source: 'hermes' });
+    const execAllowlist = [{ source: 'hermes', path: 'git-helper/scripts/helper.sh', sha256: createHash('sha256').update('echo hello\n').digest('hex') }];
+    await importSkills(src, { destRoot: dest, source: 'hermes', execAllowlist });
     expect(fs.existsSync(path.join(dest, 'imported-git-helper', 'scripts', 'helper.sh'))).toBe(true);
     expect(fs.existsSync(path.join(dest, 'imported-git-helper', 'references', 'notes.md'))).toBe(true);
 
     // re-import → conflict (skipped)
-    const again = await importSkills(src, { destRoot: dest, source: 'hermes' });
+    const again = await importSkills(src, { destRoot: dest, source: 'hermes', execAllowlist });
     expect(again.imported).toHaveLength(0);
     expect(again.skipped.some((s) => s.reason.includes('conflict'))).toBe(true);
 
     // with overwrite → re-imported
-    const forced = await importSkills(src, { destRoot: dest, source: 'hermes', overwrite: true });
+    const forced = await importSkills(src, { destRoot: dest, source: 'hermes', overwrite: true, execAllowlist });
     expect(forced.imported).toHaveLength(1);
   });
 });

@@ -15,6 +15,7 @@ import { UnifiedVfsRouter } from '../services/vfs/unified-vfs-router.js';
 import { generateDiff as sharedGenerateDiff } from '../utils/diff-generator.js';
 import { maybeReviewGatedWrite } from './review-gate-helper.js';
 import { logger } from '../utils/logger.js';
+import { adaptNewStrEol, readEditableText } from '../utils/edit-safety.js';
 
 /**
  * A single edit operation: find old_string and replace with new_string.
@@ -65,6 +66,12 @@ export class MultiEditTool {
       if (typeof edit.new_string !== 'string') {
         return { success: false, error: `Edit #${i + 1}: new_string must be a string` };
       }
+      if (edit.old_string === '') {
+        return {
+          success: false,
+          error: `Edit #${i + 1}: old_string must not be empty (an empty string matches at every position). No changes were applied.`,
+        };
+      }
     }
 
     // ── Resolve and validate path ─────────────────────────────────
@@ -85,7 +92,11 @@ export class MultiEditTool {
     // ── Read original content ─────────────────────────────────────
     let originalContent: string;
     try {
-      originalContent = await this.vfs.readFile(resolvedPath, 'utf-8');
+      const readResult = await readEditableText(this.vfs, resolvedPath, filePath);
+      if (!readResult.ok) {
+        return { success: false, error: readResult.error };
+      }
+      originalContent = readResult.text;
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       return { success: false, error: `Failed to read file: ${msg}` };
@@ -107,12 +118,25 @@ export class MultiEditTool {
         };
       }
 
-      // Replace only the first occurrence (native Edit-tool semantics). Use a
+      const occurrences = content.split(old_string).length - 1;
+      if (occurrences > 1) {
+        return {
+          success: false,
+          error: `Edit #${i + 1} failed: ${occurrences} occurrences de old_string : ajoute du contexte pour la rendre unique.\n` +
+            `  old_string: "${old_string.length > 80 ? old_string.slice(0, 80) + '...' : old_string}"\n` +
+            `  file: ${filePath}\n` +
+            `No changes were applied (atomic rollback).`,
+        };
+      }
+
+      // Exactly one occurrence here (ambiguity refused above). Use a
       // replacement FUNCTION so `$`-patterns in new_string ($&, $$, $`, $', $n)
       // are inserted verbatim — passing it as a string would let String.replace
       // expand them and corrupt the edit (e.g. "$&" would insert the matched
       // text, "$`" the whole preceding file).
-      content = content.replace(old_string, () => new_string);
+      // Fichier CRLF : un new_string en LF prend les fins de ligne de la zone.
+      const adapted = adaptNewStrEol(new_string, old_string, content);
+      content = content.replace(old_string, () => adapted);
     }
 
     // ── If content unchanged, skip write ──────────────────────────

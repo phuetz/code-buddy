@@ -235,7 +235,8 @@ export function buildMeetingAnalysisPrompts(
 
 async function defaultAnalyzer(request: Parameters<MeetingAnalyzer>[0]): Promise<string> {
   const { resolveCommandProvider } = await import('../commands/llm-provider-resolution.js');
-  const provider = resolveCommandProvider();
+  const { overrideAuxiliaryCommandProvider } = await import('../providers/auxiliary-llm.js');
+  const provider = overrideAuxiliaryCommandProvider('meeting', resolveCommandProvider());
   if (!provider) throw new Error('No configured LLM provider');
   const { CodeBuddyClient } = await import('../codebuddy/client.js');
   const client = new CodeBuddyClient(provider.apiKey, provider.model, provider.baseURL);

@@ -116,8 +116,8 @@ function stop(events: ProposalEvent[], stage: ProposalEvent['stage'], reason: Pr
 }
 
 async function defaultHasProvider(): Promise<boolean> {
-  const { detectProviderFromEnv } = await import('../../../utils/provider-detector.js');
-  return Boolean(detectProviderFromEnv());
+  const { hasAuxiliaryLlm } = await import('../../../providers/auxiliary-llm.js');
+  return hasAuxiliaryLlm('proposal');
 }
 
 function defaultProposalRecall(): ResearchRecall {

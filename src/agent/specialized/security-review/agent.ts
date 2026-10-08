@@ -17,7 +17,7 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
-import fg from 'fast-glob';
+import fg from '../../../utils/safe-fast-glob.js';
 
 import type {
   SecuritySeverity,

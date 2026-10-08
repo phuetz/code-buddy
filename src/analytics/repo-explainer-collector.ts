@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import fg from 'fast-glob';
+import fg from '../utils/safe-fast-glob.js';
 import { RepoProfiler, type RepoProfile } from '../agent/repo-profiler.js';
 import { CodeExplorerManager } from '../plugins/code-explorer/CodeExplorerManager.js';
 import { generateDocs, type GeneratedDocs } from '../tools/doc-generator.js';

@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import { confineComputeInvocation } from '../security/compute-confinement.js';
+import { confirmImportedSkillCode } from './bash/imported-skill-guard.js';
 import { logger } from '../utils/logger.js';
 import {
   isExecuteCodeToolRpcEnabled,
@@ -138,6 +139,15 @@ export async function executeCode(
   const scriptPath = path.join(runDir, `script${invocation.extension}`);
   const scriptArgs = parseArgs(input.args);
   const env = parseEnv(input.env);
+
+  // A program that launches a file of an imported skill is a launch like any other:
+  // forced human confirmation, never auto-approved, content-bound (reprise 15).
+  const importedGuard = await confirmImportedSkillCode(code, runDir, language);
+  if (importedGuard && !importedGuard.confirmed) {
+    throw new Error(importedGuard.error ?? 'Imported skill script not approved');
+  }
+  const importedChanged = importedGuard?.verifyUnchanged() ?? null;
+  if (importedChanged) throw new Error(importedChanged);
 
   // ── code→tool RPC channel (opt-in, OFF by default) ──────────────
   // The helper is injected for js/python so the script can call uniformly;

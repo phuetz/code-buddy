@@ -13,6 +13,7 @@ import { UnifiedVfsRouter } from "../services/vfs/unified-vfs-router.js";
 import { generateDiff as sharedGenerateDiff } from "../utils/diff-generator.js";
 import { detectOmissionPlaceholders, formatOmissionError } from "./omission-placeholder-detector.js";
 import { maybeReviewGatedWrite } from "./review-gate-helper.js";
+import { adaptNewStrEol, readEditableText, usesCrlf } from "../utils/edit-safety.js";
 import { createHash } from 'crypto';
 
 /**
@@ -169,7 +170,7 @@ export class TextEditorTool implements Disposable {
    * @param filePath - Path to the file to edit
    * @param oldStr - Text to find and replace
    * @param newStr - Replacement text
-   * @param replaceAll - If true, replaces all occurrences; otherwise only first
+   * @param replaceAll - If true, replaces all occurrences; otherwise old_str must be unique (several matches are refused)
    * @returns Unified diff showing the changes, or error with suggestions
    *
    * @example
@@ -186,6 +187,15 @@ export class TextEditorTool implements Disposable {
     replaceAll: boolean = false
   ): Promise<ToolResult> {
     try {
+      // Une chaîne vide « se trouve » à chaque position : l'accepter insérerait
+      // new_str partout (ou au début) sans que rien ne le signale.
+      if (oldStr === "") {
+        return {
+          success: false,
+          error: "old_str must not be empty: an empty string matches at every position. Provide the exact text to replace (or use insert / create_file to add content).",
+        };
+      }
+
       const pathValidation = this.resolveForEdit(filePath);
       if (!pathValidation.valid) {
         return { success: false, error: pathValidation.error };
@@ -199,9 +209,19 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const content = await this.vfs.readFile(resolvedPath, "utf-8");
+      const readResult = await readEditableText(this.vfs, resolvedPath, filePath);
+      if (!readResult.ok) {
+        return { success: false, error: readResult.error };
+      }
+      const content = readResult.text;
 
-      // Multi-strategy matching: exact → flexible → regex → fuzzy
+      // Multi-strategy matching: exact → flexible → unicode → regex → fuzzy,
+      // then an LCS fallback. Every strategy reports WHERE it found the text:
+      // the edit is spliced at that offset (never `String.replace(matched)`,
+      // which would rewrite the first copy of the text, maybe elsewhere).
+      let matchIndex = -1;
+      let approximate = false;
+      let candidates = 1;
       const strategyResult = multiStrategyMatch(content, oldStr);
 
       if (!strategyResult) {
@@ -210,7 +230,13 @@ export class TextEditorTool implements Disposable {
         if (lcsResult) {
           const fuzzyDiff = generateFuzzyDiff(oldStr, lcsResult.match, filePath, lcsResult);
           logger.debug("LCS fuzzy match applied", { diff: fuzzyDiff });
-          oldStr = lcsResult.match;
+          // A '\r' ending the last window line belongs to the line ending.
+          oldStr = lcsResult.match.endsWith("\r") && !oldStr.endsWith("\r")
+            ? lcsResult.match.slice(0, -1)
+            : lcsResult.match;
+          matchIndex = lcsResult.startIndex;
+          approximate = true;
+          candidates = lcsResult.ties ?? 1;
         } else {
           const suggestions = suggestWhitespaceFixes(oldStr, content);
           let errorMessage = `String not found in file: "${oldStr.substring(0, 100)}${oldStr.length > 100 ? '...' : ''}"`;
@@ -232,7 +258,47 @@ export class TextEditorTool implements Disposable {
         // Used a non-exact strategy — log and use the matched text
         logger.debug(`Edit match via ${strategyResult.strategy} strategy (confidence: ${strategyResult.confidence.toFixed(2)})`);
         oldStr = strategyResult.matched;
+        matchIndex = strategyResult.index;
+        approximate = true;
+      } else {
+        matchIndex = strategyResult.index;
       }
+      if (strategyResult) candidates = strategyResult.candidates;
+
+      // Approximate matches locate ONE window; "all occurrences" would have to
+      // guess the others. Refuse rather than rewrite the wrong places.
+      if (approximate && replaceAll) {
+        return {
+          success: false,
+          error: "replace_all needs an exact match: old_str only matched approximately (whitespace, typographic characters or fuzzy). Provide the exact text, or edit the occurrences one by one.",
+        };
+      }
+      if (matchIndex < 0 || content.slice(matchIndex, matchIndex + oldStr.length) !== oldStr) {
+        return {
+          success: false,
+          error: "Internal error: the matched text is not at the reported offset. Nothing was changed.",
+        };
+      }
+      // Ambiguïté (match exact) : sans replace_all, plusieurs occurrences = on ne devine pas
+      // laquelle viser (comme Claude Code : demander plus de contexte).
+      // Exact: occurrences of the text. Approximate: equivalent windows found
+      // by the strategy (equal ignoring whitespace/line endings/typography,
+      // regex hits, fuzzy ties) — the matched text itself may sit elsewhere
+      // inside a longer line without being a candidate.
+      const occurrences = approximate ? candidates : content.split(oldStr).length - 1;
+      if (occurrences > 1 && !replaceAll) {
+        return {
+          success: false,
+          error: `${occurrences} occurrences de old_str : ajoute du contexte pour la rendre unique, ou utilise replace_all. Le fichier n'a pas été modifié.`,
+        };
+      }
+      const applyEdit = (): string =>
+        replaceAll
+          ? content.split(oldStr).join(newStr)
+          : content.slice(0, matchIndex) + newStr + content.slice(matchIndex + oldStr.length);
+
+      // Fins de ligne : un new_str en LF dans une zone CRLF doit devenir CRLF.
+      newStr = adaptNewStrEol(newStr, oldStr, content);
 
       // Omission placeholder detection: block edits that would delete code
       const omissionResult = detectOmissionPlaceholders(newStr, oldStr);
@@ -243,15 +309,12 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const occurrences = (content.match(new RegExp(oldStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
 
       const sessionFlags = this.confirmationService.getSessionFlags();
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
         // Function replacement so the preview matches the actual write below
         // (and doesn't expand `$`-patterns in newStr — see the write path).
-        const previewContent = replaceAll
-          ? content.split(oldStr).join(newStr)
-          : content.replace(oldStr, () => newStr);
+        const previewContent = applyEdit();
         const oldLines = content.split("\n");
         const newLines = previewContent.split("\n");
         const diffContent = this.generateDiff(oldLines, newLines, filePath);
@@ -281,9 +344,7 @@ export class TextEditorTool implements Disposable {
       // insert the matched text and "$`" the whole preceding file, corrupting
       // the edit. `() => newStr` inserts it verbatim. (split/join is already
       // literal for replaceAll.)
-      const newContent = replaceAll
-        ? content.split(oldStr).join(newStr)
-        : content.replace(oldStr, () => newStr);
+      const newContent = applyEdit();
 
       // Diff-review gate — the matching cascade above resolved the fragment
       // to FULL resulting content, which is exactly what the gate reviews.
@@ -481,8 +542,21 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const fileContent = await this.vfs.readFile(resolvedPath, "utf-8");
+      const readResult = await readEditableText(this.vfs, resolvedPath, filePath);
+      if (!readResult.ok) {
+        return { success: false, error: readResult.error };
+      }
+      const fileContent = readResult.text;
       const lines = fileContent.split("\n");
+      // Fichier CRLF : chaque ligne écrite porte son \r, sauf la dernière
+      // ligne du fichier qui n'a pas de terminateur.
+      const crlf = usesCrlf(fileContent);
+      const toFileLines = (text: string): string[] => {
+        const parts = text.split("\n").map((l) => (crlf ? l.replace(/\r$/, "") : l));
+        return crlf
+          ? parts.map((l, i) => (i < parts.length - 1 || endLine < lines.length ? `${l}\r` : l))
+          : parts;
+      };
       
       if (startLine < 1 || startLine > lines.length) {
         return {
@@ -501,7 +575,7 @@ export class TextEditorTool implements Disposable {
       const sessionFlags = this.confirmationService.getSessionFlags();
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
         const newLines = [...lines];
-        const replacementLines = newContent.split("\n");
+        const replacementLines = toFileLines(newContent);
         newLines.splice(startLine - 1, endLine - startLine + 1, ...replacementLines);
         
         const diffContent = this.generateDiff(lines, newLines, filePath);
@@ -525,7 +599,7 @@ export class TextEditorTool implements Disposable {
         }
       }
 
-      const replacementLines = newContent.split("\n");
+      const replacementLines = toFileLines(newContent);
       lines.splice(startLine - 1, endLine - startLine + 1, ...replacementLines);
       const newFileContent = lines.join("\n");
 
@@ -598,8 +672,18 @@ export class TextEditorTool implements Disposable {
         };
       }
 
-      const fileContent = await this.vfs.readFile(resolvedPath, "utf-8");
+      const readResult = await readEditableText(this.vfs, resolvedPath, filePath);
+      if (!readResult.ok) {
+        return { success: false, error: readResult.error };
+      }
+      const fileContent = readResult.text;
       const lines = fileContent.split("\n");
+      // Fichier CRLF : la ligne insérée porte son \r (sauf en toute fin, sans terminateur).
+      const crlf = usesCrlf(fileContent);
+
+      const insertedText = crlf
+        ? `${content.replace(/\r?\n/g, "\r\n").replace(/\r$/, "")}${insertLine - 1 < lines.length ? "\r" : ""}`
+        : content;
 
       // Validate insert line
       if (insertLine < 1 || insertLine > lines.length + 1) {
@@ -613,7 +697,7 @@ export class TextEditorTool implements Disposable {
       const sessionFlags = this.confirmationService.getSessionFlags();
       if (!sessionFlags.fileOperations && !sessionFlags.allOperations) {
         const previewLines = [...lines];
-        previewLines.splice(insertLine - 1, 0, content);
+        previewLines.splice(insertLine - 1, 0, insertedText);
         const diffContent = this.generateDiff(lines, previewLines, filePath);
 
         const confirmationResult =
@@ -635,7 +719,7 @@ export class TextEditorTool implements Disposable {
         }
       }
 
-      lines.splice(insertLine - 1, 0, content);
+      lines.splice(insertLine - 1, 0, insertedText);
       const newContent = lines.join("\n");
 
       // Diff-review gate — resolved to FULL content, same as str_replace/create.

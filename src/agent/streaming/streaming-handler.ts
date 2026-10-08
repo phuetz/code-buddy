@@ -102,6 +102,10 @@ export interface RawStreamingChunk {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    /** USD billed for this call (OpenRouter). Absent on most providers. */
+    cost?: number;
+    cached_tokens?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
   };
 }
 
@@ -112,6 +116,9 @@ export interface RawStreamingChunk {
 export interface ProviderStreamUsage {
   promptTokens?: number;
   completionTokens?: number;
+  cachedTokens?: number;
+  /** USD the provider billed for this round, when it sent `usage.cost`. */
+  reportedCostUsd?: number;
 }
 
 function normalizeUsageCount(value: number | undefined): number | undefined {
@@ -560,10 +567,26 @@ export class StreamingHandler {
     if (!usage) return;
     const promptTokens = normalizeUsageCount(usage.prompt_tokens);
     const completionTokens = normalizeUsageCount(usage.completion_tokens);
-    if (promptTokens === undefined && completionTokens === undefined) return;
+    const cachedTokens = normalizeUsageCount(
+      usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens,
+    );
+    const reportedCostUsd = typeof usage.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0
+      ? usage.cost
+      : undefined;
+    if (
+      promptTokens === undefined
+      && completionTokens === undefined
+      && cachedTokens === undefined
+      && reportedCostUsd === undefined
+    ) {
+      return;
+    }
     this.providerUsage = {
+      ...(this.providerUsage ?? {}),
       ...(promptTokens !== undefined ? { promptTokens } : {}),
       ...(completionTokens !== undefined ? { completionTokens } : {}),
+      ...(cachedTokens !== undefined ? { cachedTokens } : {}),
+      ...(reportedCostUsd !== undefined ? { reportedCostUsd } : {}),
     };
   }
 

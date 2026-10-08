@@ -40,6 +40,10 @@ function show(id: string, present: boolean, text: string): void {
   }
 }
 
+/**
+ * One tool call on the first user turn, then a short stop.
+ * A trailing system message (sealed environment context) still counts as that turn.
+ */
 function fakeModel(toolName: string, toolArguments: Record<string, unknown>): AgentModelClient {
   let served = false;
   return {
@@ -52,8 +56,10 @@ function fakeModel(toolName: string, toolArguments: Record<string, unknown>): Ag
       throw new Error('fake local model refused a non-streaming chat');
     },
     chatStream: async function* (messages: readonly unknown[]) {
-      const last = messages[messages.length - 1] as { role?: string } | undefined;
-      if (!served && last?.role === 'user') {
+      const hasUserTurn = messages.some((message) => (
+        !!message && typeof message === 'object' && (message as { role?: string }).role === 'user'
+      ));
+      if (!served && hasUserTurn) {
         served = true;
         yield {
           choices: [{

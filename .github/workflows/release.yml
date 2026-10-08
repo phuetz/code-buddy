@@ -72,6 +72,14 @@ jobs:
     - name: Smoke tests (deterministic core suites)
       run: npm test -- tests/fleet tests/kanban
 
+    # Garde du paquet : refuse toute carte des sources (*.map), fichier .env,
+    # secret, fichier privé (*.private.json, auth.json), chemin personnel
+    # (/home/<nom>, /data/<nom>, /Users/<nom>, C:\Users\<nom>) ou fichier _qa/
+    # dans le tarball. `prepack` la relance de toute façon ; l'étape explicite
+    # la rend visible dans les logs et bloque avant toute publication.
+    - name: Check npm package contents
+      run: npm run check:package
+
     - name: Publish to npm
       run: npm publish --access public
 

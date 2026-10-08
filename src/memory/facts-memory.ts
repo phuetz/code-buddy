@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
 import { CodeBuddyClient } from '../codebuddy/client.js';
-import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { clientFromDecision, resolveAuxiliaryLlm } from '../providers/auxiliary-llm.js';
 
 export const FactCategorySchema = z.enum([
   'Profil',      // User profile / roles
@@ -101,15 +101,19 @@ export class FactsMemoryService {
     if (sessionClient) return sessionClient;
     if (this.fallbackClient) return this.fallbackClient;
     // Skip auto-detecting client in unit tests to prevent timeouts/real API calls
-    if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    const decision = resolveAuxiliaryLlm({ role: 'facts' });
+    const reusableInTests = decision.status === 'resolved'
+      && (decision.source === 'explicit' || decision.source === 'session');
+    if ((process.env.NODE_ENV === 'test' || process.env.VITEST) && !reusableInTests) {
       return null;
     }
-    const detected = detectProviderFromEnv();
-    if (!detected) {
+    if (decision.status !== 'resolved') {
       logger.warn('[FactsMemory] No LLM provider configuration found.');
       return null;
     }
-    this.fallbackClient = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+    const resolved = clientFromDecision(decision);
+    if (!resolved) return null;
+    this.fallbackClient = resolved;
     return this.fallbackClient;
   }
 

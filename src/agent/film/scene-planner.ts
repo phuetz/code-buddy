@@ -73,7 +73,8 @@ function buildPlannerUserPrompt(pitch: string, count: number): string {
 /** Default LLM: resolve the current provider and run one JSON chat. Throws if no provider. */
 async function defaultChat(system: string, user: string, model?: string): Promise<string> {
   const { resolveCommandProvider } = await import('../../commands/llm-provider-resolution.js');
-  const resolved = resolveCommandProvider(model ? { explicitModel: model } : {});
+  const { overrideAuxiliaryCommandProvider } = await import('../../providers/auxiliary-llm.js');
+  const resolved = overrideAuxiliaryCommandProvider('scenes', resolveCommandProvider(model ? { explicitModel: model } : {}), model);
   if (!resolved) {
     throw new Error(
       'Aucun modèle LLM configuré pour planifier les scènes. Lancez `buddy login` (ChatGPT, $0) ou configurez une clé provider.'

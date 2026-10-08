@@ -49,7 +49,9 @@ export function wireDefaultProgressSink(): void {
 
   tracker.on('progress', (update: ProgressUpdate) => {
     const done = update.completed + update.failed;
-    const pct = update.total > 0 ? Math.round((done / update.total) * 100) : 0;
+    const pct = update.total > 0
+      ? Math.min(100, Math.round((done / update.total) * 100))
+      : 0;
     // Cross a 25%-quantum threshold → log. Avoids per-tool spam.
     const bucket = Math.floor(pct / 25) * 25;
     if (bucket > lastLoggedThreshold && bucket > 0) {

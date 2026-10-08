@@ -173,6 +173,32 @@ describe('skill exchange export', () => {
   });
 });
 
+describe('skill exchange executable gate (reprise 14)', () => {
+  it('installs a signed script inert: no execute bit, scriptsUnverified, pinned sha256', async () => {
+    const packageDir = exportDemo();
+    fs.chmodSync(path.join(packageDir, 'scripts', 'never-run.js'), 0o755);
+    useHome(installerHome);
+    // the file mode is not part of the signed content: only the bytes are
+    const result = await installSkill(packageDir, { trust: true, destRoot: destination });
+    const installed = path.join(result.path, 'scripts', 'never-run.js');
+    expect(fs.statSync(installed).mode & 0o111).toBe(0);
+    const skillMd = fs.readFileSync(path.join(result.path, 'SKILL.md'), 'utf-8');
+    expect(skillMd).toContain('scriptsUnverified: true');
+    expect(skillMd).toContain(createHash('sha256').update(fs.readFileSync(installed)).digest('hex'));
+  });
+
+  it('refuses a package that embeds a binary or an archive', async () => {
+    useHome(authorHome);
+    const dir = writeAuthoredSkill('authored-bin');
+    fs.writeFileSync(path.join(dir, 'scripts', 'data.json'), Buffer.concat([Buffer.from('504b0304', 'hex'), Buffer.alloc(32)]));
+    exportSkill('authored-bin', output);
+    useHome(installerHome);
+    await expect(installSkill(path.join(output, 'authored-bin'), { trust: true, destRoot: destination }))
+      .rejects.toThrow(/Binary, link or special file refused/);
+    expect(fs.existsSync(path.join(destination, 'imported-authored-bin'))).toBe(false);
+  });
+});
+
 describe('skill exchange fail-closed install', () => {
   it('refuses an invalid signature before installation', async () => {
     const packageDir = exportDemo();

@@ -42,8 +42,16 @@ function show(id: string, present: boolean, isError: boolean, text: string): voi
   }
 }
 
-/** One tool call on the first user turn, then a short stop. Never opens a socket. */
-function fakeModel(toolName: string, toolArguments: Record<string, unknown>): AgentModelClient {
+/**
+ * One tool call on the first user turn, then a short stop. Never opens a socket.
+ * The sealed environment block is a system message after the user turn, so the
+ * last role is not a signal that the turn has not started.
+ */
+function fakeModel(
+  toolName: string,
+  toolArguments: Record<string, unknown>,
+  observe?: (messages: readonly unknown[]) => void,
+): AgentModelClient {
   let served = false;
   return {
     getCurrentModel: () => 'fake-local',
@@ -55,8 +63,11 @@ function fakeModel(toolName: string, toolArguments: Record<string, unknown>): Ag
       throw new Error('fake local model refused a non-streaming chat');
     },
     chatStream: async function* (messages: readonly unknown[]) {
-      const last = messages[messages.length - 1] as { role?: string } | undefined;
-      if (!served && last?.role === 'user') {
+      observe?.(messages);
+      const hasUserTurn = messages.some((message) => (
+        !!message && typeof message === 'object' && (message as { role?: string }).role === 'user'
+      ));
+      if (!served && hasUserTurn) {
         served = true;
         yield {
           choices: [{
@@ -229,5 +240,32 @@ describe.sequential('agent_task recoit le contexte MCP', () => {
       agent.dispose();
       try { process.chdir(dirs.previousCwd); } catch { /* removed */ }
     }
+  }, 180_000);
+
+  it('le contexte scelle en fin de transcript n empeche pas le refus bash', async () => {
+    const dirs = layout('mcp-agent-ordre-');
+    const tails: Array<{ role?: string; content?: string }> = [];
+    const outcome = await callAgentTask(
+      dirs,
+      fakeModel('bash', {
+        command: `printf '%s\\n' hors > ${JSON.stringify(dirs.outsideFile)}`,
+      }, (messages) => {
+        if (tails.length > 0) return;
+        const last = messages[messages.length - 1] as { role?: string; content?: unknown } | undefined;
+        tails.push({
+          role: last?.role,
+          content: typeof last?.content === 'string' ? last.content : '',
+        });
+      }),
+    );
+    const tail = tails[0];
+    const present = fs.existsSync(dirs.outsideFile);
+    show('agent-ordre', present, outcome.isError, outcome.text);
+    expect(tail?.role, 'ASSERT dernier message systeme').toBe('system');
+    expect(tail?.content ?? '', 'ASSERT contexte d environnement en queue').toMatch(/<environment_context>/);
+    expect(present, 'ASSERT agent-ordre fichier absent').toBe(false);
+    expect(outcome.text, 'ASSERT agent-ordre garde-fou bash').toMatch(
+      /unconfined escalation refused in MCP mode/i,
+    );
   }, 180_000);
 });

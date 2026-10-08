@@ -18,9 +18,8 @@ import { BaseAgent } from "./base-agent.js";
 import { createAgentInfrastructureSync, AgentInfrastructure } from "./infrastructure/index.js";
 import type { CheckpointManager } from "../checkpoints/checkpoint-manager.js";
 import type { Session, SessionStore } from "../persistence/session-store.js";
-import type { CostTracker, ExtendedCostInfo } from "../utils/cost-tracker.js";
-import { isChatGptSubscriptionModel, isLocalNoCostModel } from "../utils/cost-tracker.js";
-import { hasModelPricing } from "../config/model-pricing.js";
+import type { CostTracker, ExtendedCostInfo, CostBillingContext, ProviderReportedUsage } from "../utils/cost-tracker.js";
+import { resolveCostBilling } from "../utils/cost-tracker.js";
 import { getLaneQueue } from "../concurrency/lane-queue.js";
 import type { RouteAgentConfig } from "../channels/peer-routing.js";
 import { findSkill, findStarterPack, resetSkillRegistry } from "../skills/index.js";
@@ -33,6 +32,7 @@ import { initializeMemory, getMemoryManager } from "../memory/persistent-memory.
 import { restoreSessionHistory } from '../persistence/session-history.js';
 import { getUserHooksManager } from "../hooks/user-hooks.js";
 import { isFeatureEnabled } from "../config/feature-flags.js";
+import { clearSessionLlmRouteIfMatches, setSessionLlmRoute } from "../providers/session-llm-route.js";
 import { getActiveRunStore } from "../observability/run-store.js";
 import { recordSkillActivity } from "../skills/skill-usage-store.js";
 import { resetIdentityManager } from "../identity/identity-manager.js";
@@ -160,7 +160,7 @@ export class CodeBuddyAgent extends BaseAgent {
    * over its rounds. `null` when the provider reported none — the caller must
    * then say so rather than pass an estimate off as a measurement.
    */
-  private lastTurnProviderUsage: { promptTokens: number; completionTokens: number } | null = null;
+  private lastTurnProviderUsage: ProviderReportedUsage | null = null;
 
   private toolSelectionStrategy: ToolSelectionStrategy;
 
@@ -302,6 +302,7 @@ export class CodeBuddyAgent extends BaseAgent {
     this.codebuddyClient = launchOptions?.modelClient
       ? launchOptions.modelClient as unknown as CodeBuddyClient
       : new CodeBuddyClient(apiKey, modelToUse, baseURL);
+    this.publishSessionLlmRoute();
 
     // Apply thinkingLevel from settings if configured
     try {
@@ -1788,6 +1789,19 @@ Look at the screenshot and find the element matching the user's intent. Output o
   }
 
   /**
+   * Provider-level billing context derived from the REAL client, so cost
+   * classification never relies on the model slug alone. A paid aggregator
+   * model such as `deepseek/deepseek-v4.1-flash` served by OpenRouter must not
+   * be reported as a flat-fee subscription.
+   */
+  private getCostBillingContext(): CostBillingContext {
+    return {
+      subscriptionAuth: this.codebuddyClient.isSubscriptionAuth?.() ?? false,
+      localTarget: this.codebuddyClient.isEffectiveTargetLocal?.() ?? false,
+    };
+  }
+
+  /**
    * Token counters as reported by the PROVIDER for the last completed turn.
    * Returns `undefined` when the provider reported none, so a consumer never
    * mistakes an estimate for a measurement.
@@ -1809,21 +1823,20 @@ Look at the screenshot and find the element matching the user's intent. Output o
     // Determine if we have provider usage
     const estimated = lastProviderUsage === null || lastProviderUsage === undefined;
 
-    // Get billing and pricing status
-    const billing: 'pay-per-use' | 'subscription' =
-      isChatGptSubscriptionModel(model) || isLocalNoCostModel(model)
-        ? 'subscription'
-        : 'pay-per-use';
-
-    const pricing: 'known' | 'unknown' | 'subscription' =
-      billing === 'subscription'
-        ? 'subscription'
-        : hasModelPricing(model) ? 'known' : 'unknown';
+    // Get billing and pricing status from the real provider, not the slug.
+    const { billing, pricing } = resolveCostBilling(model, this.getCostBillingContext());
+    // An invoice (`usage.cost`) is a known price for this call even when the
+    // slug is absent from the local table. A flat-fee backend stays a forfait.
+    const invoice = lastProviderUsage?.reportedCostUsd;
+    const pricedByInvoice = billing !== 'subscription'
+      && typeof invoice === 'number'
+      && Number.isFinite(invoice)
+      && invoice >= 0;
 
     return {
       total: this.sessionCost,
       estimated,
-      pricing,
+      pricing: pricedByInvoice ? 'known' : pricing,
       billing,
       inputTokens: report.sessionTokens.input,
       outputTokens: report.sessionTokens.output,
@@ -1895,8 +1908,29 @@ Look at the screenshot and find the element matching the user's intent. Output o
     return this.codebuddyClient;
   }
 
+  /** Publie la route réelle du client pour les tâches auxiliaires du processus. */
+  private publishSessionLlmRoute(): void {
+    const client = this.codebuddyClient;
+    if (!client?.getApiKey || !client.getBaseURL || !client.getCurrentModel) return;
+    const apiKey = client.getApiKey();
+    const baseURL = client.getBaseURL();
+    const model = client.getCurrentModel();
+    if (!apiKey || !baseURL || !model) return;
+    setSessionLlmRoute({ apiKey, model, baseURL });
+  }
+
+  private clearSessionLlmRoute(): void {
+    const client = this.codebuddyClient;
+    if (!client?.getApiKey || !client.getBaseURL) return;
+    const apiKey = client.getApiKey();
+    const baseURL = client.getBaseURL();
+    if (!apiKey || !baseURL) return;
+    clearSessionLlmRouteIfMatches(baseURL, apiKey);
+  }
+
   setModel(model: string): void {
     this.codebuddyClient.setModel(model);
+    this.publishSessionLlmRoute();
     // Update token counter for new model
     this.tokenCounter.dispose();
     this.tokenCounter = createTokenCounter(model);
@@ -2302,17 +2336,25 @@ Look at the screenshot and find the element matching the user's intent. Output o
   private recordSessionCost(
     inputTokens: number,
     outputTokens: number,
-    providerUsage?: { promptTokens: number; completionTokens: number }
-  ): void {
+    providerUsage?: ProviderReportedUsage,
+  ): number {
     const model = this.codebuddyClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model, 0, providerUsage);
+    const billingContext = this.getCostBillingContext();
+    const cost = this.costTracker.calculateCost(
+      inputTokens,
+      outputTokens,
+      model,
+      providerUsage?.cachedTokens ?? 0,
+      providerUsage,
+      billingContext,
+    );
     this.sessionCost += cost;
     this.routingFacade?.addSessionCost(cost);
 
     // Record usage with effective tokens (provider if available, otherwise local estimate)
     const effectiveInput = providerUsage?.promptTokens ?? inputTokens;
     const effectiveOutput = providerUsage?.completionTokens ?? outputTokens;
-    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model);
+    this.costTracker.recordUsage(effectiveInput, effectiveOutput, model, billingContext, providerUsage);
 
     // Store provider usage for extended cost info retrieval
     if (providerUsage) {
@@ -2335,6 +2377,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     if (this.sessionCostLimit !== Infinity) {
       this.budgetAlertManager.check(this.sessionCost, this.sessionCostLimit);
     }
+    return cost;
   }
 
   /**
@@ -2343,7 +2386,14 @@ Look at the screenshot and find the element matching the user's intent. Output o
    */
   protected override estimateSessionCostAfter(inputTokens: number, outputTokens: number): number {
     const model = this.codebuddyClient.getCurrentModel();
-    const cost = this.costTracker.calculateCost(inputTokens, outputTokens, model);
+    const cost = this.costTracker.calculateCost(
+      inputTokens,
+      outputTokens,
+      model,
+      0,
+      undefined,
+      this.getCostBillingContext(),
+    );
     return this.sessionCost + cost;
   }
 
@@ -2635,6 +2685,7 @@ Look at the screenshot and find the element matching the user's intent. Output o
     });
     this.contextManager.stopPeriodicSnapshot?.();
     this.peerRoutingConfig = null;
+    this.clearSessionLlmRoute();
     super.dispose();
     if (headlessProcess) {
       cleanupHeadlessSingletonWatchers();

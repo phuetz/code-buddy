@@ -251,7 +251,8 @@ const PHOTO_FR_SYSTEM = [
 async function defaultCompanionSummarizer(description: string): Promise<string | null> {
   try {
     const { resolveCommandProvider } = await import('../commands/llm-provider-resolution.js');
-    const resolved = resolveCommandProvider();
+    const { overrideAuxiliaryCommandProvider } = await import('../providers/auxiliary-llm.js');
+    const resolved = overrideAuxiliaryCommandProvider('photo_memory', resolveCommandProvider());
     if (!resolved) return null;
     const { CodeBuddyClient } = await import('../codebuddy/client.js');
     const client = new CodeBuddyClient(

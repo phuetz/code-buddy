@@ -5,6 +5,7 @@
  * as they arrive from the spawned process.
  */
 
+import { isLmResizerEnabled } from '../../context/lm-resizer-compressor.js';
 import { spawn } from 'child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { BoundedOutput } from '../../utils/bounded-output.js';
@@ -25,6 +26,7 @@ import {
 } from './execution-policy.js';
 import { confineSpawn } from '../../security/native-sandbox.js';
 import { refusedUnconfinedEscalationResult } from './unconfined-escalation.js';
+import { confirmImportedSkillScripts } from './imported-skill-guard.js';
 
 export interface StreamingExecutorDeps {
   getCurrentDirectory: () => string;
@@ -92,10 +94,23 @@ export async function* executeStreaming(
     return { success: false, error: `Command blocked by execution policy: ${policy.reason}` };
   }
 
+  // Scripts shipped by an imported skill are inert and never auto-approved.
+  const importedScripts = await confirmImportedSkillScripts(executionCommand, cwd);
+  if (importedScripts && !importedScripts.confirmed) {
+    return { success: false, error: importedScripts.error ?? 'Imported skill script not approved' };
+  }
+
+  const pinChanged = (): ToolResult | null => {
+    const changed = importedScripts?.verifyUnchanged() ?? null;
+    return changed ? { success: false, error: changed } : null;
+  };
+
   let requiresDirectApproval = policy.action === 'ask';
   let escalationReason = policy.reason;
 
   if (policy.action === 'sandbox') {
+    const changedBeforeSandbox = pinChanged();
+    if (changedBeforeSandbox) return changedBeforeSandbox;
     const sandboxed = await executeInWorkspaceSandbox(executionCommand, cwd, timeout, signal);
     if (signal?.aborted) {
       return { success: false, error: 'Command aborted by user' };
@@ -111,10 +126,18 @@ export async function* executeStreaming(
         if (stderr) yield stderr;
         return exitCode === 0
           ? { success: true, output: (stdout || stderr || 'Command executed successfully (no output)').trim() }
-          : {
-              success: false,
-              error: `${(stderr || stdout || `Command exited with code ${exitCode}`).trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
-            };
+          : isLmResizerEnabled() && stdout.trim() && stderr.trim()
+            // Both channels matter: `stderr || stdout` used to drop the whole log
+            // when the command also wrote one line on stderr. lm-resizer on only.
+            ? {
+                success: false,
+                output: stdout.trim(),
+                error: `${stderr.trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
+              }
+            : {
+                success: false,
+                error: `${(stderr || stdout || `Command exited with code ${exitCode}`).trim()}\n[sandbox:${backend}; exit code ${exitCode}]`,
+              };
       }
       requiresDirectApproval = true;
       escalationReason = `Sandbox boundary denied the command: ${stderr || stdout}`;
@@ -164,6 +187,9 @@ export async function* executeStreaming(
       error: 'Executable identity changed after policy evaluation; retry the command for a fresh decision.',
     };
   }
+
+  const changedBeforeSpawn = pinChanged();
+  if (changedBeforeSpawn) return changedBeforeSpawn;
 
   // Spawn the process
   const isWindows = process.platform === 'win32';
@@ -271,7 +297,14 @@ export async function* executeStreaming(
   const output = stdout.text();
   if (failure) return { success: false, error: failure, output };
   if (proc.exitCode !== 0) {
-    return { success: false, error: stderr.text() || `Exit code ${proc.exitCode}`, output };
+    // lm-resizer on: keep the status even when stderr has text (it used to vanish,
+    // so the model was told "exit 1" for a process that exited 2).
+    const errText = stderr.text();
+    return {
+      success: false,
+      error: isLmResizerEnabled() && errText ? `${errText}\nExit code ${proc.exitCode}` : errText || `Exit code ${proc.exitCode}`,
+      output,
+    };
   }
   return { success: true, output };
 }

@@ -320,7 +320,7 @@ export class StrReplaceEditorTool implements ITool {
           },
           replace_all: {
             type: 'boolean',
-            description: 'If true, replace all occurrences; otherwise only first',
+            description: 'If true, replace all occurrences; otherwise old_str must occur exactly once (several matches are refused: add context)',
             default: false,
           },
         },

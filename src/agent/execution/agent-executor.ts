@@ -38,6 +38,12 @@ import {
   sanitizeAssistantOutput,
 } from "./context-pipeline.js";
 import { extractYieldChildId, processYieldSignal } from "./yield-coordinator.js";
+import { splitVolatileSuffix } from "../../prompts/cache-stable-prefix.js";
+import {
+  appendEnvironmentFromVolatile,
+  appendMemoryIfChanged,
+  sealAppendOnlyTranscript,
+} from "../../prompts/append-only-context.js";
 import {
   runPreToolUseHook,
   pushBlockedToolMessage,
@@ -62,6 +68,10 @@ import { extractEditedFilesFromHistory } from "../middleware/changed-files.js";
 import type { MessageQueue } from "../message-queue.js";
 import { semanticTruncate } from "../../utils/head-tail-truncation.js";
 import { optimizeToolObservation } from '../../context/tool-observation-optimizer.js';
+import { detectExitCode, ensureFailureVisible, exitLabelFromText } from '../../context/failure-view.js';
+import { isLmResizerEnabled } from '../../context/lm-resizer-compressor.js';
+import { getCurrentProvider } from '../../tools/hooks/default-hooks.js';
+import { sanitizeResult as sanitizeResultForProvider } from '../../tools/hooks/result-sanitizer.js';
 import { compress as tokenJuice, isTokenJuiceEnabled, JUICE_MIN_CHARS } from "../../context/token-juice.js";
 import {
   formatToolResultForRecovery,
@@ -70,12 +80,14 @@ import {
 import { recordCompactionFork } from "../../context/compaction-fork.js";
 import { getActiveRunStore } from "../../observability/run-store.js";
 import { loadToolLoopGuardOptions, ToolLoopGuard, type ToolLoopDecision } from "./tool-loop-guard.js";
+import { StagnationDetector } from "./stagnation-detector.js";
 import { getGlobalEventBus } from "../../events/event-bus.js";
 import { takeFirstUseHint } from "../../utils/first-use-hints.js";
 import { getTurnMetricsRecorder } from '../../observability/turn-metrics.js';
 import type { ICMBridge } from "../../memory/icm-bridge.js";
 import { shouldCompactBeforeToolExec, estimateToolResultTokens } from "../../context/proactive-compaction.js";
 import { formatTokenUsage, estimateCost } from "../../utils/token-display.js";
+import type { ProviderReportedUsage } from "../../utils/cost-tracker.js";
 import { classifyQuery } from "./query-classifier.js";
 import { getModelToolConfig } from "../../config/model-tools.js";
 import { getLatencyOptimizer, getStreamingOptimizer } from "../../optimization/latency-optimizer.js";
@@ -104,6 +116,7 @@ import { maybeAutoCommit } from '../../tools/auto-commit.js';
 import {
   applyToolOutputMasking,
   expireOldToolResults,
+  resolveToolTtlStep,
   pruneImageContent,
 } from '../../context/tool-output-masking.js';
 import { IncrementalMessageTokenCounter } from './incremental-token-counter.js';
@@ -524,7 +537,11 @@ export interface ExecutorConfig {
   /** Returns true if current model is a Grok model (enables web search) */
   isGrokModel: () => boolean;
   /** Records token usage for cost tracking (additive — call once per turn) */
-  recordSessionCost: (input: number, output: number, providerUsage?: { promptTokens: number; completionTokens: number }) => void;
+  recordSessionCost: (
+    input: number,
+    output: number,
+    providerUsage?: ProviderReportedUsage,
+  ) => number | void;
   /**
    * Optional: publishes the counters the PROVIDER reported for the turn, summed
    * over every round. Called exactly once per turn — with `undefined` when no
@@ -534,7 +551,7 @@ export interface ExecutorConfig {
    * measured number from a guessed one.
    */
   recordTurnProviderUsage?: (
-    usage: { promptTokens: number; completionTokens: number } | undefined,
+    usage: ProviderReportedUsage | undefined,
   ) => void;
   /** Returns true if session cost limit has been reached */
   isSessionCostLimitReached: () => boolean;
@@ -602,6 +619,13 @@ export class AgentExecutor {
     );
     return isParallel ? readTimeoutMs : toolTimeoutMs;
   }
+
+  /**
+   * After the first provider request, the system message and every earlier
+   * turn stay byte-identical. Later drift is appended. Compaction is the
+   * only later rewrite of that prefix.
+   */
+  private systemPrefixSealed = false;
 
   constructor(
     private deps: ExecutorDependencies,
@@ -1313,10 +1337,10 @@ export class AgentExecutor {
       return;
     }
 
-    // Pure, per-turn tone context. Keep it out of the persisted transcript and
-    // the agent identity: a changing system-prompt append would rebuild Cowork's
-    // cached agent on every message. This block is added to each prepared LLM
-    // request in the turn instead, including post-tool rounds.
+    // Pure, per-turn tone context. It stays off the sealed transcript (see
+    // sealAppendOnlyTranscript): persisting it would rebuild Cowork's cached
+    // agent. It is the deliberate exception to the strict request prefix,
+    // together with file-mention bytes and the companion current-turn block.
     const emotionalPresenceContext = buildTextEmotionalPresenceContext(
       turnQueryText,
       messages.flatMap((turn) =>
@@ -1347,37 +1371,52 @@ export class AgentExecutor {
     const loopGuard = new ToolLoopGuard(loadToolLoopGuardOptions());
     let pendingLoopDecision: Exclude<ToolLoopDecision, { action: 'none' }> | null = null;
     let loopGuardStopped = false;
+    // One stagnation detector per task: a single refocus hint, never a stop.
+    const stagnation = new StagnationDetector();
+    let pendingStagnationHint: string | null = null;
     let observationShortened = false;
     let totalOutputTokens = 0;
     let totalInputTokensForCost = 0;
     let providerPromptTokens = 0;
     let providerCompletionTokens = 0;
+    let providerCachedTokens = 0;
+    let providerReportedCostUsd = 0;
+    let providerUsageRounds = 0;
+    let providerCostRounds = 0;
     let providerUsageSeen = false;
     let sessionCostRecorded = false;
+    let recordedTurnCost: number | undefined;
+    const turnProviderUsage = (): ProviderReportedUsage | undefined => {
+      if (!providerUsageSeen) return undefined;
+      // A partial invoice (one round billed, another not) is not a total.
+      // Fall back to the price table instead of summing only the rounds that
+      // happened to carry `usage.cost`.
+      const invoiceComplete = providerUsageRounds > 0 && providerCostRounds === providerUsageRounds;
+      return {
+        promptTokens: providerPromptTokens,
+        completionTokens: providerCompletionTokens,
+        ...(providerCachedTokens > 0 ? { cachedTokens: providerCachedTokens } : {}),
+        ...(invoiceComplete ? { reportedCostUsd: providerReportedCostUsd } : {}),
+      };
+    };
     const recordTurnCost = (): void => {
       if (sessionCostRecorded) return;
       sessionCostRecorded = true;
+      const providerUsage = turnProviderUsage();
       try {
-        // Pass provider usage when available (takes precedence over local estimates)
-        const providerUsage = providerUsageSeen
-          ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
-          : undefined;
         // Only pass provider usage when the provider reported one, so the
         // historical two-argument call (and its tests) stays byte-identical.
-        if (providerUsage) {
-          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage);
-        } else {
-          this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        const recorded = providerUsage
+          ? this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens, providerUsage)
+          : this.config.recordSessionCost(totalInputTokensForCost, totalOutputTokens);
+        if (typeof recorded === 'number' && Number.isFinite(recorded)) {
+          recordedTurnCost = recorded;
         }
       } catch (error) {
         logger.warn('Failed to record session cost', { error: getErrorMessage(error) });
       }
       try {
-        this.config.recordTurnProviderUsage?.(
-          providerUsageSeen
-            ? { promptTokens: providerPromptTokens, completionTokens: providerCompletionTokens }
-            : undefined,
-        );
+        this.config.recordTurnProviderUsage?.(providerUsage);
       } catch (error) {
         logger.warn('Failed to record provider turn usage', { error: getErrorMessage(error) });
       }
@@ -1572,11 +1611,21 @@ export class AgentExecutor {
 
         const firstMessage = messages[0];
         if (rebuiltSystemPrompt && firstMessage && firstMessage.role === 'system') {
-          firstMessage.content = rebuiltSystemPrompt;
-          incrementalTokenCounter.invalidate();
-          logger.debug(
-            `[agent-executor] system prompt rebuilt query-aware (${rebuiltSystemPrompt.length} chars)`,
-          );
+          if (!this.systemPrefixSealed) {
+            firstMessage.content = rebuiltSystemPrompt;
+            incrementalTokenCounter.invalidate();
+            logger.debug(
+              `[agent-executor] system prompt rebuilt query-aware (${rebuiltSystemPrompt.length} chars)`,
+            );
+          } else {
+            // Already sent: do not rewrite messages[0]. Memory and the
+            // environment block are appended only when their text changes.
+            appendMemoryIfChanged(messages, rebuiltSystemPrompt);
+            appendEnvironmentFromVolatile(
+              messages,
+              splitVolatileSuffix(rebuiltSystemPrompt).volatile,
+            );
+          }
         }
 
         let tools = codeResearch
@@ -1726,6 +1775,16 @@ export class AgentExecutor {
         // hangs FOREVER (turns stuck for hours in Cowork and headless waves).
         // Fail fast with a clear error instead; the caller/user retries.
         const progress = startHeadlessPromptProgress();
+        // Date, folder and `Project:` leave the leading system message and are
+        // sealed into history, so the next request starts with this one.
+        // Compaction is the only later rewrite of that prefix. Count tokens
+        // before the seal: the per-turn context blocks stay out of the cost
+        // figure, as they did before they were committed.
+        preparedMessages = sealAppendOnlyTranscript(messages, preparedMessages, {
+          date: new Date().toISOString().slice(0, 10),
+          directory: turnCwd,
+        });
+        this.systemPrefixSealed = true;
         const streamFactory = () => withStallGuard(this.deps.client.chatStream(
           preparedMessages,
           tools,
@@ -1961,8 +2020,24 @@ export class AgentExecutor {
         const roundProviderUsage = this.deps.streamingHandler.getProviderUsage?.();
         if (roundProviderUsage) {
           providerUsageSeen = true;
+          providerUsageRounds += 1;
           providerPromptTokens += roundProviderUsage.promptTokens ?? 0;
           providerCompletionTokens += roundProviderUsage.completionTokens ?? 0;
+          if (
+            typeof roundProviderUsage.cachedTokens === 'number'
+            && Number.isFinite(roundProviderUsage.cachedTokens)
+            && roundProviderUsage.cachedTokens > 0
+          ) {
+            providerCachedTokens += roundProviderUsage.cachedTokens;
+          }
+          if (
+            typeof roundProviderUsage.reportedCostUsd === 'number'
+            && Number.isFinite(roundProviderUsage.reportedCostUsd)
+            && roundProviderUsage.reportedCostUsd >= 0
+          ) {
+            providerReportedCostUsd += roundProviderUsage.reportedCostUsd;
+            providerCostRounds += 1;
+          }
         }
         yield { type: "token_count", tokenCount: inputTokens + totalOutputTokens };
 
@@ -1982,6 +2057,14 @@ export class AgentExecutor {
 
         if (toolCalls && toolCalls.length > 0) {
           toolRounds++;
+          // Progress is measured in tool ROUNDS — the same unit as the
+          // denominator (`maxToolRounds`). Counting one update per tool CALL
+          // made the numerator (calls) diverge from the denominator (rounds)
+          // whenever a round carried several parallel calls, reporting
+          // >100% and a negative ETA (journal 2026-10-04: 225/150 done).
+          try {
+            getProgressTracker().update(`round-${toolRounds}`, 'completed');
+          } catch { /* progress optional */ }
 
           // Pre-check cost limit before executing tools (estimate only — no side effects)
           if (this.config.estimateSessionCostLimitReached(inputTokens, totalOutputTokens)) {
@@ -2187,6 +2270,14 @@ export class AgentExecutor {
               pendingLoopDecision = loopDecision;
             }
 
+            // Exploration without production (same files re-read, nothing written).
+            const stagnationDecision = stagnation.observe({
+              name: toolCall.function.name,
+              argumentsJson: toolCall.function.arguments || '{}',
+              success: result.success,
+            });
+            if (stagnationDecision) pendingStagnationHint = stagnationDecision.message;
+
             // Expand the current turn's cached schema after discovery or live
             // authoring. Without this, a newly created tool is dispatchable but
             // invisible to the model until the next user turn.
@@ -2239,13 +2330,8 @@ export class AgentExecutor {
               });
             } catch { /* notification optional */ }
             // Phase (d).21 ship 4 — progress update.
-            try {
-              getProgressTracker().update(
-                toolCall.id,
-                result.success ? 'completed' : 'failed',
-                toolCall.function.name,
-              );
-            } catch { /* progress optional */ }
+            // Progress is advanced once per tool ROUND at the `toolRounds++`
+            // boundary above, never per tool call (see the comment there).
 
             // --- Track file access for code graph context (streaming, incremental update) ---
             try {
@@ -2340,7 +2426,8 @@ export class AgentExecutor {
               toolCallId: toolCall.id || `tool_${Date.now()}`,
               content: modelObservation,
               success: result?.success,
-              exitCode: result?.success ? 0 : 1,
+              exitCode: result?.success ? 0 : (detectExitCode(modelObservation) ?? 1),
+              ...(result?.success === false && detectExitCode(modelObservation) === undefined ? { exitCodeUnknown: true } : {}),
               command: logicalCommand,
               query: message ?? '',
               workspaceRoot: toolWorkspace,
@@ -2371,6 +2458,17 @@ export class AgentExecutor {
                 }
               }
             }
+            // A failed command must stay visibly failed, with its cause, and no
+            // success-looking line may contradict it (lm-resizer on only; off =
+            // unchanged). Runs on whatever the model is about to read.
+            if (isLmResizerEnabled() && result?.success === false && toolCall.function.name !== 'restore_context') {
+              modelStreamContent = ensureFailureVisible(
+                modelStreamContent,
+                rawForRecovery,
+                exitLabelFromText(rawForRecovery),
+                observationShortened,
+              );
+            }
 
             const observationMetadata = {
               optimizer: optimization.optimized ? 'lm-resizer' : 'none',
@@ -2381,8 +2479,22 @@ export class AgentExecutor {
               bytesSaved: Math.max(0, optimization.originalBytes - Buffer.byteLength(modelStreamContent)),
               ...(optimization.transport ? { transport: optimization.transport } : {}),
             };
+            // With lm-resizer enabled the after-hook let the whole output through so
+            // the optimizer could see it. History and UI keep the historical
+            // provider cap; the exact output stays in the recovery store.
+            let displayResult = result;
+            if (isLmResizerEnabled() && result?.output) {
+              const capped = sanitizeResultForProvider(getCurrentProvider(), {
+                toolCallId: toolCall.id || '',
+                toolName: toolCall.function.name,
+                success: result.success,
+                output: result.output,
+                error: result.error,
+              });
+              if (capped.output !== result.output) displayResult = { ...result, output: capped.output };
+            }
             result = {
-              ...result,
+              ...displayResult,
               metadata: {
                 ...(result?.metadata ?? {}),
                 contextOptimization: observationMetadata,
@@ -2577,6 +2689,19 @@ export class AgentExecutor {
             }
           }
 
+          // Stagnation hint: appended at the END of the transcript (history is never
+          // rewritten, so the prompt-cache prefix stays valid), once per task.
+          if (pendingStagnationHint) {
+            const hint = pendingStagnationHint;
+            pendingStagnationHint = null;
+            logger.warn('[stagnation] refocus hint injected', { toolRounds });
+            yield { type: "content", content: `\n⚠️ ${hint}\n` };
+            messages.push({
+              role: 'system' as const,
+              content: `<context type="stagnation-hint">\n${hint}\n</context>`,
+            });
+          }
+
           // Tool-call/result pairs are complete at this boundary, so a steer
           // that arrived while tools were running can now be injected safely.
           const deferredSteering = this.deps.messageQueue?.hasSteeringMessage()
@@ -2618,7 +2743,7 @@ export class AgentExecutor {
 
           // Apply TTL-based tool result expiry + image pruning + backward-scanned FIFO masking (streaming path)
           try {
-            expireOldToolResults(messages, toolRounds);
+            expireOldToolResults(messages, toolRounds, 20, resolveToolTtlStep());
             pruneImageContent(messages);
             applyToolOutputMasking(messages);
             incrementalTokenCounter.invalidate();
@@ -2705,15 +2830,24 @@ export class AgentExecutor {
       // (e.g. gpt-5.5 via ChatGPT Codex backend) — flat-fee, not per token.
       // Optional call: the real client always implements this, but test doubles
       // may be partial mocks — fall through to estimateCost when it's absent.
-      const streamTurnCost = this.deps.client.isSubscriptionAuth?.()
-        ? 0
-        : estimateCost(
-            totalInputTokensForCost,
-            totalOutputTokens,
-            undefined,
-            undefined,
-            this.deps.client.getCurrentModel(),
-          );
+      // Provider context is authoritative: only a real flat-fee backend
+      // (ChatGPT OAuth / Codex, Gemini CLI) or a local runtime yields $0.
+      // A paid aggregator model such as `deepseek/…` on OpenRouter must be
+      // estimated, not presented as a free subscription.
+      // The recorded figure already applied the invoice, the cache discount
+      // and the forfait/local rules. estimateCost is only the fallback when
+      // recording returned nothing (partial test doubles).
+      const streamTurnCost = recordedTurnCost ?? estimateCost(
+        totalInputTokensForCost,
+        totalOutputTokens,
+        undefined,
+        undefined,
+        this.deps.client.getCurrentModel(),
+        {
+          subscriptionAuth: this.deps.client.isSubscriptionAuth?.() ?? false,
+          localTarget: this.deps.client.isEffectiveTargetLocal?.() ?? false,
+        },
+      );
       const streamUsageDisplay = formatTokenUsage({
         inputTokens: totalInputTokensForCost,
         outputTokens: totalOutputTokens,

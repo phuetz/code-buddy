@@ -6,6 +6,7 @@
  * cannot be applied, the command is refused — never executed unsandboxed.
  */
 
+import { importedSkillRoots } from './skill-executable-gate.js';
 import { spawnSync as realSpawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from 'child_process';
 import { existsSync as realExistsSync, mkdirSync as realMkdirSync, readFileSync as realReadFileSync } from 'fs';
 import os from 'os';
@@ -369,9 +370,11 @@ export function buildSeatbeltArgv(profile: string, command: string[]): string[] 
   return ['-p', profile, ...command];
 }
 
-function defaultHidePaths(homeDir: string): string[] {
+function defaultHidePaths(homeDir: string, env: NodeJS.ProcessEnv = process.env): string[] {
   return [
     '/etc',
+    // Imported skills: their scripts are inert data, never reachable from a confined shell (reprise 15).
+    ...importedSkillRoots(env),
     ...HOME_SECRET_NAMES.map((name) => path.join(homeDir, name)),
     path.join(homeDir, '.docker', 'config.json'),
     path.join(homeDir, '.config', 'gh'),
@@ -434,7 +437,7 @@ export function buildDefaultPolicy(
     homeDir,
     chdir: projectRoot,
     network: false,
-    hidePaths: existingPaths(defaultHidePaths(homeDir), existsSync),
+    hidePaths: existingPaths(defaultHidePaths(homeDir, io.env ?? process.env), existsSync),
     readOnlyRoots: existingPaths(DEFAULT_RO_ROOTS, existsSync),
   };
 }

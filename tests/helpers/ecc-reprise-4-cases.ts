@@ -1,0 +1,32 @@
+const wide = '\uFF40';
+export const reprise4Scripts = [
+  ['php-wide', 'php', `<?php $out = ${wide}id${wide};`, 'php-backtick'],
+  ['php-greek-varia', 'php', '<?php $out = `id`;', 'php-backtick'],
+  ['shell-greek-varia', 'sh', 'out=`id`', 'shell-backtick'],
+  ['shell-wide', 'sh', `out=${wide}id${wide}`, 'shell-backtick'],
+  ['php-wide-multiline', 'php', `<?php $out = ${wide}id\n${wide};`, 'php-backtick'],
+  ['shell-wide-multiline', 'sh', `out=${wide}id\n${wide}`, 'shell-backtick'],
+  ['shell-mixed-width', 'sh', `out=\`id${wide}`, 'shell-backtick'],
+  ['php-mixed-width', 'php', `<?php $out = ${wide}id\`;`, 'php-backtick'],
+  ['shell-wide-after-literal', 'sh', `echo '\`text'; out=${wide}id${wide}`, 'shell-backtick'],
+  ['shell-wide-double-quoted', 'sh', `out="${wide}id${wide}"`, 'shell-backtick'],
+  ['shell-wide-after-literal-heredoc', 'sh', `cat <<'DOC'\n${wide}text${wide}\nDOC\nout=${wide}id${wide}`, 'shell-backtick'],
+  ['shell-wide-unquoted-heredoc', 'sh', `cat <<DOC\n${wide}id${wide}\nDOC`, 'shell-backtick'],
+  ['optional-rm', 'js', 'rm?.(target, { recursive: true })', 'script-recursive-delete'],
+  ['optional-rm-sync', 'js', 'fs.rmSync?.(target, { recursive: true })', 'script-recursive-delete'],
+  ['optional-rmdir', 'js', 'rmdir?.(target, { recursive: true })', 'script-recursive-delete'],
+  ['optional-quoted-rm', 'js', "fs['rm']?.(target, { recursive: true })", 'script-recursive-delete'],
+  ['php-ascii-control', 'php', '<?php $out = `id`;', 'php-backtick'],
+  ['shell-ascii-control', 'sh', 'out=`id`', 'shell-backtick'],
+] as const;
+export const reprise4Documents = [
+  ['php-wide-document', `\`\`\`php\n$out = ${wide}id${wide};\n\`\`\``, 'php-backtick'],
+  ['shell-wide-document', `\`\`\`sh\nout=${wide}id${wide}\n\`\`\``, 'shell-backtick'],
+  ['folded-language-document', `\`\`\`ｐｈｐ\n$out = ${wide}id${wide};\n\`\`\``, 'php-backtick'],
+  ['optional-rm-document', '```js\nrm?.(target, { recursive: true })\n```', 'script-recursive-delete'],
+  ['ambiguous-operating', 'Works on any operating system(whoami)', 'native-process'],
+  ['ambiguous-file', 'Prefer the file system(whoami)', 'native-process'],
+  ['ambiguous-management', 'A database management system(whoami)', 'native-process'],
+  ['ambiguous-enumeration', 'Works on any operating system (Linux, whoami)', 'native-process'],
+  ['ambiguous-spaced', 'Works on any operating system (whoami)', 'native-process'],
+] as const;

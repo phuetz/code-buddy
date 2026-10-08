@@ -97,6 +97,45 @@ export function capCompactToolList<T extends { function: { name: string } }>(
 
 
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
+function hostnameOf(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  try {
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `http://${value}`;
+    const host = new URL(withScheme).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    return host || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * True when THIS request URL is a local runtime: a loopback host, or the same
+ * host as a configured Ollama / vLLM / LM Studio endpoint.
+ *
+ * Ambient `OLLAMA_HOST` alone does not make a paid URL (OpenRouter, xAI, …)
+ * local. A LAN runtime is local only when the request host matches it.
+ * `gemini-cli://` and ChatGPT hosts are not local — the subscription path
+ * covers those.
+ */
+export function isLocalRequestUrl(url: string | undefined, env: NodeJS.ProcessEnv = process.env): boolean {
+  const host = hostnameOf(url);
+  if (!host) return false;
+  if (LOOPBACK_HOSTS.has(host)) return true;
+  for (const raw of [
+    env.OLLAMA_HOST,
+    env.VLLM_BASE_URL,
+    env.LMSTUDIO_BASE_URL,
+    env.LM_STUDIO_BASE_URL,
+    env.CODEBUDDY_LMSTUDIO_BASE_URL,
+  ]) {
+    if (hostnameOf(raw) === host) return true;
+  }
+  return false;
+}
+
 export function isLocalLlmProvider(env: NodeJS.ProcessEnv = process.env): boolean {
   const provider = env.CODEBUDDY_PROVIDER?.trim().toLowerCase();
   if (provider && LOCAL_PROVIDERS.has(provider)) return true;

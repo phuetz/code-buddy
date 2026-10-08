@@ -323,6 +323,16 @@ export async function runSync(
 
 /** Attach ingest/recall/stats subcommands to the `research` command. */
 export function addKnowledgeSubcommands(cmd: Command, depsFactory: () => Promise<KnowledgeIngestDeps> = defaultDeps): void {
+  // Fin de commande : fermer le sidecar Rust du graphe (jamais d'enfant vivant à la sortie).
+  cmd.hook('postAction', async () => {
+    try {
+      const { closeCollectiveKnowledgeGraph } = await import('../../memory/collective-knowledge-graph.js');
+      closeCollectiveKnowledgeGraph();
+    } catch {
+      /* ignore */
+    }
+  });
+
   cmd
     .command('sync <peer>')
     .description('Pull first-hand lessons/facts from an opted-in fleet peer')

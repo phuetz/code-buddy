@@ -9,7 +9,7 @@
 import { CodeBuddyClient } from '../codebuddy/client.js';
 import { scanForSecrets } from '../fleet/privacy-lint.js';
 import { logger } from '../utils/logger.js';
-import { detectProviderFromEnv } from '../utils/provider-detector.js';
+import { resolveAuxiliaryLlm, selectAuxiliaryClient } from '../providers/auxiliary-llm.js';
 import type { ChatEntry } from '../agent/types.js';
 import {
   getMemoryCandidateQueue,
@@ -237,13 +237,19 @@ async function extractWithLlm(
   chatHistory: ChatEntry[],
   client?: CodeBuddyClient,
 ): Promise<NormalizedMemoryCandidate[]> {
-  let llm: CodeBuddyClient | null = client ?? null;
-  if (!llm) {
-    if (process.env.NODE_ENV === 'test' || process.env.VITEST) return [];
-    const detected = detectProviderFromEnv();
-    if (!detected) return [];
-    llm = new CodeBuddyClient(detected.apiKey, detected.defaultModel, detected.baseURL);
+  const decision = resolveAuxiliaryLlm({ role: 'memory' });
+  // Ambient discovery stays off under Vitest so a login on the machine
+  // cannot turn every memory unit test into a provider call. An explicit
+  // role setting, the published session route, or an injected client still runs.
+  const reusableInTests = Boolean(client) || (
+    decision.status === 'resolved'
+    && (decision.source === 'explicit' || decision.source === 'session')
+  );
+  if ((process.env.NODE_ENV === 'test' || process.env.VITEST) && !reusableInTests) {
+    return [];
   }
+  const llm = selectAuxiliaryClient('memory', client);
+  if (!llm) return [];
 
   try {
     const res = await llm.chat([
