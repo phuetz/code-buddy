@@ -182,7 +182,7 @@
     "@browserbasehq/stagehand": "^3.6.0",
     "@huggingface/transformers": "^4.3.0",
     "@iarna/toml": "^2.2.5",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@ngrok/ngrok": "^1.7.0",
     "@noble/curves": "^1.9.7",
     "@opentelemetry/api": "^1.9.0",
