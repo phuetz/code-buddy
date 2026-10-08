@@ -2,6 +2,7 @@
 
 ### Corrigé
 
+- Gamme Claude 5.5 (Haiku, Sonnet, Opus) : le défaut du fournisseur `anthropic` est `claude-sonnet-5-5` (remplaçable par `ANTHROPIC_MODEL` ou `CLAUDE_MODEL`) au lieu d'un modèle retiré qui répondait 404 ; `temperature`, `top_p` et `top_k` ne sont plus envoyés aux modèles qui les refusent (400 « deprecated ») ; un appel d'outil ne casse plus au deuxième tour (le type de l'appel était concaténé à chaque fragment de flux) ; une réponse vide (réflexion adaptative qui consomme `max_tokens`) est une erreur explicite qui nomme le budget au lieu d'un succès vide ; la réflexion étendue reste en `enabled`, seule forme acceptée par l'endpoint compatible OpenAI. `CODEBUDDY_ANTHROPIC_THINKING=disabled` coupe la réflexion quand le modèle le permet. Les catalogues de Cowork et de l'extension VS Code suivent.
 - Les estimations de coût lisent une table tarifaire commune avec source et date par modèle ; les alias de modèles utilisent le prix de leur cible.
 - Dans Cowork, un nouveau budget YOLO vaut 100 $ par défaut au lieu de 10 $, avec 400 tours au lieu de 50 ; un budget déjà enregistré est conservé. Le plafond est configurable jusqu'à 1 000 $ et transmis au moteur intégré.
 
