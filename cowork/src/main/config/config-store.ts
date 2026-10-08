@@ -1,3 +1,4 @@
+import { anthropicDefaultModel } from '../../shared/anthropic-models';
 import { DEFAULT_YOLO_SESSION_COST_USD, YOLO_SESSION_COST_HARD_CAP_USD } from '../../../../src/config/session-cost-defaults.js';
 /**
  * @module main/config/config-store
@@ -316,7 +317,7 @@ const defaultProfiles: Record<ProviderProfileKey, ProviderProfile> = {
   anthropic: {
     apiKey: '',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-6',
+    model: anthropicDefaultModel(),
   },
   openai: {
     apiKey: '',

@@ -16,6 +16,7 @@
  * - Git integration for version control
  */
 
+import { anthropicDefaultModel } from '../../shared/anthropic-models';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -841,7 +842,7 @@ async function callVisionAPI(
     process.env.CLAUDE_MODEL ||
     process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ||
     process.env.OPENAI_MODEL ||
-    'claude-3-5-sonnet-20241022';
+    anthropicDefaultModel();
   // Get enableThinking from configStore
   // const enableThinking = configStore.get('enableThinking') ?? false;
   // writeMCPLog(`[Vision] configStore: ${JSON.stringify(configStore.getAll())}`);

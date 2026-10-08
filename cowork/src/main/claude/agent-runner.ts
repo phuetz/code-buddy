@@ -12,6 +12,7 @@
  *
  * Dependencies: session-manager, mcp-manager, config-store, skills-manager
  */
+import { anthropicDefaultModel } from '../../shared/anthropic-models';
 import {
   createAgentSession,
   SessionManager as PiSessionManager,
@@ -947,7 +948,7 @@ ${hints.join('\n')}
   private getCurrentModelString(preferredModel?: string): string {
     const routeModel = preferredModel?.trim();
     const configuredModel = configStore.get('model')?.trim();
-    const model = routeModel || configuredModel || 'anthropic/claude-sonnet-4';
+    const model = routeModel || configuredModel || `anthropic/${anthropicDefaultModel()}`;
     logCtx('[ClaudeAgentRunner] Current model:', model);
     logCtx(
       '[ClaudeAgentRunner] Model source:',

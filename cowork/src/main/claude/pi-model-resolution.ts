@@ -1,3 +1,4 @@
+import { anthropicDefaultModel } from '../../shared/anthropic-models';
 import { getModel, type Api, type Model } from '@mariozechner/pi-ai';
 import { isOfficialOpenAIBaseUrl } from '../config/auth-utils';
 
@@ -186,7 +187,7 @@ export function resolveSyntheticPiModelFallback(
 export function resolvePiModelString(input: PiModelStringInput): string {
   const model = input.model?.trim();
   if (!model) {
-    return input.defaultModel || 'anthropic/claude-sonnet-4';
+    return input.defaultModel || `anthropic/${anthropicDefaultModel()}`;
   }
   if (model.includes('/')) {
     return model;
