@@ -23,6 +23,7 @@
  * A leftover ChatGPT id must never be sent to Ollama.
  */
 
+import { getAnthropicModel } from '../config/model-defaults.js';
 import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -222,7 +223,7 @@ const SPECS: Record<PeerChatProviderId, ProviderSpec> = {
   },
   anthropic: {
     id: 'anthropic',
-    defaultModel: 'claude-sonnet-4-6',
+    defaultModel: getAnthropicModel(),
     defaultBaseUrl: 'https://api.anthropic.com/v1',
     isLocal: false,
     resolve: () => {

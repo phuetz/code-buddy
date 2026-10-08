@@ -8,6 +8,7 @@
  * are mocked via `global.fetch` so the test doesn't depend on what's
  * actually running on the machine.
  */
+import { MODEL_ROLES } from '../../src/config/model-defaults.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -100,8 +101,8 @@ describe('capability-registry — env-based detection', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-xxx';
     const cap = await getLocalCapabilities();
     const ids = cap.models.map((m) => m.id);
-    expect(ids).toContain('claude-opus-4');
-    expect(ids).toContain('claude-haiku-4');
+    expect(ids).toContain(MODEL_ROLES.architect.anthropic);
+    expect(ids).toContain(MODEL_ROLES.fast.anthropic);
     expect(cap.egress).toBe('cloud');
   });
 
@@ -413,7 +414,7 @@ describe('capability-registry — strength derivation', () => {
     process.env.ANTHROPIC_API_KEY = 'k';
     process.env.OPENAI_API_KEY = 'k';
     const cap = await getLocalCapabilities();
-    const haiku = cap.models.find((m) => m.id === 'claude-haiku-4');
+    const haiku = cap.models.find((m) => m.id === MODEL_ROLES.fast.anthropic);
     const mini = cap.models.find((m) => m.id === 'gpt-5-mini');
     expect(haiku?.strengths).toContain('cheap');
     expect(haiku?.strengths).toContain('fast');

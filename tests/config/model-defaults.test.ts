@@ -17,6 +17,8 @@ import {
   getProviderDefaultModel,
   MODEL_ROLES,
   GEMINI_FALLBACK_CHAIN,
+  ANTHROPIC_MODEL_CATALOG,
+  getAnthropicModel,
   type ProviderKey,
 } from '../../src/config/model-defaults.js';
 
@@ -29,6 +31,7 @@ describe('model-defaults', () => {
     delete process.env.OPENAI_MODEL;
     delete process.env.ANTHROPIC_MODEL;
     delete process.env.GEMINI_MODEL;
+    delete process.env.CLAUDE_MODEL;
   });
 
   afterEach(() => {
@@ -51,7 +54,7 @@ describe('model-defaults', () => {
     it('should have the expected default model for each provider', () => {
       expect(MODEL_DEFAULTS.xai).toBe('grok-code-fast-1');
       expect(MODEL_DEFAULTS.openai).toBe('gpt-4o');
-      expect(MODEL_DEFAULTS.anthropic).toBe('claude-sonnet-4-20250514');
+      expect(MODEL_DEFAULTS.anthropic).toBe('claude-sonnet-5-5');
       expect(MODEL_DEFAULTS.google).toBe('gemini-2.5-flash');
       expect(MODEL_DEFAULTS.ollama).toBe('llama3.2');
       expect(MODEL_DEFAULTS.lmstudio).toBe('local-model');
@@ -81,7 +84,7 @@ describe('model-defaults', () => {
       expect(getProviderDefaultModel('xai')).toBe('grok-code-fast-1');
       expect(getProviderDefaultModel('openai')).toBe('gpt-4o');
       expect(getProviderDefaultModel('google')).toBe('gemini-2.5-flash');
-      expect(getProviderDefaultModel('anthropic')).toBe('claude-sonnet-4-20250514');
+      expect(getProviderDefaultModel('anthropic')).toBe('claude-sonnet-5-5');
     });
 
     it('should respect GROK_MODEL env var', () => {
@@ -95,8 +98,8 @@ describe('model-defaults', () => {
     });
 
     it('should respect ANTHROPIC_MODEL env var', () => {
-      process.env.ANTHROPIC_MODEL = 'claude-opus-4-20250514';
-      expect(getProviderDefaultModel('anthropic')).toBe('claude-opus-4-20250514');
+      process.env.ANTHROPIC_MODEL = 'claude-opus-5-5';
+      expect(getProviderDefaultModel('anthropic')).toBe('claude-opus-5-5');
     });
 
     it('should respect GEMINI_MODEL env var', () => {
@@ -140,6 +143,28 @@ describe('model-defaults', () => {
 
     it('architect role should contain anthropic entry', () => {
       expect(MODEL_ROLES.architect.anthropic).toBeDefined();
+    });
+  });
+
+  describe('gamme Claude 5.5 (validation Anthropic du 2026-10-08)', () => {
+    it('le catalogue de repli est la gamme actuelle, sans modèle retiré', () => {
+      expect([...ANTHROPIC_MODEL_CATALOG]).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
+    });
+
+    it('CLAUDE_MODEL est lu quand ANTHROPIC_MODEL est absent, ANTHROPIC_MODEL l’emporte', () => {
+      process.env.CLAUDE_MODEL = 'claude-haiku-5-5';
+      expect(getProviderDefaultModel('anthropic')).toBe('claude-haiku-5-5');
+      process.env.ANTHROPIC_MODEL = 'claude-opus-5-5';
+      expect(getProviderDefaultModel('anthropic')).toBe('claude-opus-5-5');
+    });
+
+    it('les rôles léger et architecte ont une valeur par défaut et une variable d’environnement', () => {
+      delete process.env.CODEBUDDY_ANTHROPIC_LIGHT_MODEL;
+      delete process.env.CODEBUDDY_ANTHROPIC_ARCHITECT_MODEL;
+      expect(getAnthropicModel('light')).toBe('claude-haiku-5-5');
+      expect(getAnthropicModel('architect')).toBe('claude-opus-5-5');
+      process.env.CODEBUDDY_ANTHROPIC_LIGHT_MODEL = 'claude-sonnet-5-5';
+      expect(getAnthropicModel('light')).toBe('claude-sonnet-5-5');
     });
   });
 });

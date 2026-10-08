@@ -9,6 +9,7 @@
  * - Provider-specific settings
  */
 
+import { ANTHROPIC_MODEL_CATALOG } from '../../src/config/model-defaults.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -687,8 +688,7 @@ denylist = ["rm -rf /", "sudo .*"]
       });
 
       it('should have Claude models', () => {
-        expect(SUPPORTED_MODELS['claude-opus-4-6']).toBeDefined();
-        expect(SUPPORTED_MODELS['claude-sonnet-4-5-20250929']).toBeDefined();
+        for (const id of ANTHROPIC_MODEL_CATALOG) expect(SUPPORTED_MODELS[id]).toBeDefined();
       });
 
       it('should have Gemini models', () => {

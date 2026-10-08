@@ -5,6 +5,7 @@
  * Part of the Phase 7: Connection Profiles System.
  */
 
+import { getAnthropicModel } from './model-defaults.js';
 import { AIProvider } from '../utils/config-validator.js';
 import { getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 
@@ -232,7 +233,7 @@ export const DEFAULT_PROFILES: ConnectionProfile[] = [
     name: 'Anthropic Claude',
     provider: 'claude',
     baseURL: 'https://api.anthropic.com/v1',
-    model: 'claude-sonnet-4-20250514',
+    model: getAnthropicModel(),
     icon: '🎭',
     description: 'Anthropic Claude models',
     enabled: true,

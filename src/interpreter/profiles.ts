@@ -10,6 +10,7 @@
  * - coding: Code generation focused
  */
 
+import { getAnthropicModel } from '../config/model-defaults.js';
 import type { InterpreterProfile } from './types.js';
 
 // ============================================================================
@@ -179,7 +180,7 @@ export const CODING_PROFILE: InterpreterProfile = {
   name: 'Coding',
   description: 'Optimized for code generation and development',
   provider: 'anthropic',
-  model: 'claude-3-5-sonnet',
+  model: getAnthropicModel(),
   autoRun: true,
   safeMode: 'off',
   maxBudget: 10.00,

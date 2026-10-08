@@ -10,6 +10,7 @@
  * Inspired by Lisa's AFlowCore optimizer, adapted for Lobster DAG format.
  */
 
+import { getAnthropicModel } from '../config/model-defaults.js';
 import { logger } from '../utils/logger.js';
 import type { LobsterWorkflow, LobsterStep, StepResult } from './lobster-engine.js';
 
@@ -76,7 +77,7 @@ const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = {
   iterations: 50,
   explorationConstant: 1.414,
   maxParallelism: 4,
-  availableModels: ['grok-3', 'grok-3-mini', 'claude-sonnet-4-20250514'],
+  availableModels: ['grok-3', 'grok-3-mini', getAnthropicModel()],
 };
 
 // ============================================================================

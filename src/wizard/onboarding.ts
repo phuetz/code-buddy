@@ -1,3 +1,4 @@
+import { getAnthropicModel } from '../config/model-defaults.js';
 import { getOllamaBaseUrl, getOllamaV1BaseUrl } from '../utils/ollama-url.js';
 import * as readline from 'readline';
 import { spawn } from 'child_process';
@@ -79,7 +80,7 @@ export const PROVIDER_ENV_MAP: Record<string, string> = {
 export const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
   chatgpt: 'gpt-6-sol',
   grok: 'grok-3',
-  claude: 'claude-sonnet-4-20250514',
+  claude: getAnthropicModel(),
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o',
   openrouter: 'openai/gpt-4o',
@@ -135,7 +136,7 @@ export const PROVIDER_GUIDES: OnboardingProviderGuide[] = [
     label: 'Anthropic Claude API key',
     authMode: 'api-key',
     envVar: 'ANTHROPIC_API_KEY',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: getAnthropicModel(),
     baseURL: 'https://api.anthropic.com/v1',
     verifyCommand: 'buddy doctor',
     help: 'Set ANTHROPIC_API_KEY in your shell or secret manager.',

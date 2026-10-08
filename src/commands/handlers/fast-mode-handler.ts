@@ -12,6 +12,7 @@
  *   /fast model <m> — Set the fast model to use
  */
 
+import { getAnthropicModel } from '../../config/model-defaults.js';
 import type { CommandHandlerResult } from './branch-handlers.js';
 import { failureFlag } from '../slash-failure.js';
 
@@ -26,7 +27,7 @@ let previousModel: string | null = null;
 // Default fast models per provider prefix
 const FAST_MODEL_DEFAULTS: Record<string, string> = {
   'grok': 'grok-4-fast',
-  'claude': 'claude-haiku-4-5',
+  'claude': getAnthropicModel('light'),
   'gpt': 'gpt-4.1-mini',
   'gemini': 'gemini-3.1-flash-lite',
   'o4': 'o4-mini',

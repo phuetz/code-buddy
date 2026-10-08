@@ -769,7 +769,7 @@ export class SecurityAuditor {
         title: 'Legacy or poorly instruction-tuned model in use',
         description: `Model "${modelEnv}" may not reliably follow safety instructions or tool constraints.`,
         impact: 'Agent may not respect deny-listed operations or safety boundaries.',
-        recommendation: 'Upgrade to a modern instruction-tuned model (gpt-4o, claude-3-5-sonnet, grok-3).',
+        recommendation: 'Upgrade to a modern instruction-tuned model (gpt-4o, a current Claude model, grok-3).',
         details: { model: modelEnv },
       });
     }

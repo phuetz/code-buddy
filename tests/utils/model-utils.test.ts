@@ -2,6 +2,7 @@
  * Tests for model utilities
  */
 
+import { MODEL_DEFAULTS } from '../../src/config/model-defaults.js';
 import {
   isSupportedModel,
   getModelInfo,
@@ -19,7 +20,7 @@ describe('Model Utilities', () => {
     it('should return true for supported models', () => {
       expect(isSupportedModel('grok-4-latest')).toBe(true);
       expect(isSupportedModel('grok-3-latest')).toBe(true);
-      expect(isSupportedModel('claude-opus-4-6')).toBe(true);
+      expect(isSupportedModel(MODEL_DEFAULTS.anthropic)).toBe(true);
       expect(isSupportedModel('gemma4:12b')).toBe(true);
     });
 
@@ -110,7 +111,7 @@ describe('Model Utilities', () => {
   describe('getDefaultModel', () => {
     it('should return correct default for each provider', () => {
       expect(getDefaultModel('xai')).toBe('grok-4-latest');
-      expect(getDefaultModel('anthropic')).toBe('claude-opus-4-6');
+      expect(getDefaultModel('anthropic')).toBe(MODEL_DEFAULTS.anthropic);
       expect(getDefaultModel('openai')).toBe('gpt-4o');
       expect(getDefaultModel('google')).toBe('gemini-2.5-pro');
       expect(getDefaultModel('lmstudio')).toBe('local-model');
@@ -122,7 +123,7 @@ describe('Model Utilities', () => {
     it('should return all supported models', () => {
       const models = getSupportedModels();
       expect(models).toContain('grok-4-latest');
-      expect(models).toContain('claude-opus-4-6');
+      expect(models).toContain(MODEL_DEFAULTS.anthropic);
       expect(models).toContain('gemini-2.5-pro');
       expect(models.length).toBeGreaterThan(0);
     });
@@ -138,7 +139,7 @@ describe('Model Utilities', () => {
 
     it('should return models for anthropic provider', () => {
       const models = getModelsByProvider('anthropic');
-      expect(models).toContain('claude-opus-4-6');
+      expect(models).toContain(MODEL_DEFAULTS.anthropic);
       expect(models.every((m) => m.startsWith('claude'))).toBe(true);
     });
 

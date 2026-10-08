@@ -3,7 +3,7 @@
  *
  * The tool takes no parameters. It reads the current conversation history
  * via an injected provider, instantiates a dedicated CodeBuddyClient for
- * the advisor model (default claude-opus-4-7), and forwards the history
+ * the advisor model (default: the Anthropic architect model, claude-opus-5-5), and forwards the history
  * with a reviewer system prompt.
  *
  * Wiring: codebuddy-agent.ts registers the conversation provider via
@@ -11,6 +11,7 @@
  * messages is the current history at call time.
  */
 
+import { getAnthropicModel } from '../config/model-defaults.js';
 import type { ToolResult } from '../types/index.js';
 import type { CodeBuddyMessage } from '../codebuddy/client.js';
 import { logger } from '../utils/logger.js';
@@ -48,7 +49,7 @@ export function resetAdvisorContextProvider(): void {
 export interface AdvisorConfig {
   /** Whether the advisor tool is enabled (default: true) */
   enabled?: boolean;
-  /** Model to use for the advisor call (default: claude-opus-4-7) */
+  /** Model to use for the advisor call (default: the Anthropic architect model, claude-opus-5-5) */
   model?: string;
   /** Environment variable name for the API key (default: ANTHROPIC_API_KEY) */
   api_key_env?: string;
@@ -58,7 +59,7 @@ export interface AdvisorConfig {
 
 const DEFAULT_ADVISOR_CONFIG: Required<Omit<AdvisorConfig, 'base_url'>> & { base_url?: string } = {
   enabled: true,
-  model: 'claude-opus-4-7',
+  model: getAnthropicModel('architect'),
   api_key_env: 'ANTHROPIC_API_KEY',
 };
 

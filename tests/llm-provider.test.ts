@@ -2,6 +2,7 @@
  * Multi-LLM Provider Tests
  */
 
+import { ANTHROPIC_MODEL_CATALOG, MODEL_DEFAULTS } from '../src/config/model-defaults.js';
 import {
   ProviderManager,
   GrokProvider,
@@ -76,13 +77,12 @@ describe('LLM Provider', () => {
     it('should have correct type and name', () => {
       expect(provider.type).toBe('claude');
       expect(provider.name).toBe('Claude (Anthropic)');
-      expect(provider.defaultModel).toBe('claude-sonnet-4-20250514');
+      expect(provider.defaultModel).toBe(MODEL_DEFAULTS.anthropic);
     });
 
     it('should return models list', async () => {
       const models = await provider.getModels();
-      expect(models).toContain('claude-sonnet-4-20250514');
-      expect(models).toContain('claude-opus-4-20250514');
+      for (const id of ANTHROPIC_MODEL_CATALOG) expect(models).toContain(id);
     });
 
     it('should return pricing info', () => {

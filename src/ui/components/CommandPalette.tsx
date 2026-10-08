@@ -8,6 +8,7 @@
  * - `#` for sessions/recent prompts
  */
 
+import { ANTHROPIC_MODEL_CATALOG } from '../../config/model-defaults.js';
 import React, { useState, useMemo, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { getNavigableHistory } from '../navigable-history.js';
@@ -42,8 +43,7 @@ const COMMON_MODELS: Array<{ model: string; description: string }> = [
   { model: 'grok-3', description: 'xAI Grok 3' },
   { model: 'grok-3-mini', description: 'xAI Grok 3 Mini' },
   { model: 'grok-3-fast', description: 'xAI Grok 3 Fast' },
-  { model: 'claude-sonnet-4-20250514', description: 'Anthropic Claude Sonnet 4' },
-  { model: 'claude-opus-4-20250514', description: 'Anthropic Claude Opus 4' },
+  ...ANTHROPIC_MODEL_CATALOG.map(model => ({ model, description: `Anthropic ${model}` })),
   { model: 'gpt-4o', description: 'OpenAI GPT-4o' },
   { model: 'gpt-4o-mini', description: 'OpenAI GPT-4o Mini' },
   { model: 'o3', description: 'OpenAI o3' },
