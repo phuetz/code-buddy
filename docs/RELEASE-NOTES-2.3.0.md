@@ -28,7 +28,7 @@ Le détail ligne par ligne, avec les commits, est dans le [changelog](../CHANGEL
 ### Performance — cache
 
 - Le préfixe du prompt reste stable d'un tour à l'autre (date et dossier après le préfixe, contexte variable en ajout seul, expiration des anciens résultats d'outils par paliers).
-- @@CACHE@@
+- Mesure sur cette version : 50 requêtes d'un audit en lecture seule de 36 fichiers (OpenRouter, `deepseek/deepseek-v4.1-flash` servi par DeepInfra), 89,5 % des jetons d'entrée lus en cache (92,5 % de la 21e à la 40e requête), 0,03 $ au total, contre 30 à 45 % avant le correctif. Les ruptures de préfixe tombent aux paliers d'expiration (messages 7 et 25) et une fois sur le message système ; un seul modèle et un seul fournisseur ont été mesurés.
 
 ### Compatibilité Claude 5.5
 

@@ -28,7 +28,7 @@
 
 - La date, le dossier de travail et la ligne `Project:` restent envoyés à chaque requête mais après le préfixe stable, et le contexte variable (date, dossier, mémoire, leçons, tâches) est ajouté à la fin, en ajout seul : le préfixe déjà envoyé ne change plus d'un tour à l'autre (`b544dc05e`, `62336a7f3`, `b506e637f`). Les jetons servis par le cache sont comptés dans le flux de réponse (`c111cb72b`).
 - Les résultats d'outils anciens ne sont plus réécrits à chaque tour : leurs stubs ne portent plus d'âge (`[Tool result expired]`), chaque étape est idempotente, et l'expiration se fait par paliers (`CODEBUDDY_TOOL_TTL_STEP`, défaut 10 tours, 1 = à chaque tour). Avant, le plus ancien résultat changeait à chaque requête et le cache restait bloqué au préfixe qui le précède (≈ 12 000 jetons) ; contrepartie : un résultat est réduit au plus 9 tours plus tard (`8f10ad2df`).
-- Mesure : @@CACHE@@
+- Mesure sur cette version : 50 requêtes d'un audit en lecture seule de 36 fichiers (OpenRouter, `deepseek/deepseek-v4.1-flash` servi par DeepInfra), 89,5 % des jetons d'entrée lus en cache (92,5 % de la 21e à la 40e requête), 0,03 $ au total, contre 30 à 45 % avant le correctif. Les ruptures de préfixe tombent aux paliers d'expiration (messages 7 et 25) et une fois sur le message système ; un seul modèle et un seul fournisseur ont été mesurés.
 
 ### Compatibilité Claude 5.5
 
