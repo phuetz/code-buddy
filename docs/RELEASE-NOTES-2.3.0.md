@@ -64,5 +64,6 @@ Node.js 20 ou plus récent.
 
 - Un secret suivi par Git peut encore être lu par une commande shell qui lit les objets du dépôt : la garantie est reportée en 2.3.1 (voir la section Sécurité du changelog).
 - Reportés en 2.3.1 : les correctifs de sécurité du service mobile (relecture « à corriger » : un jeton d'appareil absent du magasin est accepté par `/desktop`) et les tarifs de la gamme Claude 5.5 (absents de la table des prix : l'estimation de coût utilise le prix d'un modèle inconnu).
+- Les 27 avis hauts acceptés de `audit-allowlist.json` ont tous pour échéance de relecture le **14/10/2026** : passé cette date, la porte d'audit de la CI échoue de nouveau tant qu'ils ne sont pas réexaminés.
 - Le bac à sable natif reste optionnel ; sous Landlock il refuse la commande plutôt que de masquer les sockets.
 - Le catalogue des fonctionnalités et les notes précédentes restent la référence pour les limites des fonctions optionnelles de « Code Buddy 2 ».
