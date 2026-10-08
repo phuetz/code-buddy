@@ -1,10 +1,10 @@
 # Compatibilité Code Buddy / Cowork avec la gamme Claude 5.5 — 08/10/2026
 
 Branche `fix/anthropic-5-5-2026-10-08`, départ `origin/main` `aa328839c`. Aucun push.
-Source des défauts : `~/Videos/Partage/20261008-validation-anthropic/essais/RAPPORT.md` (D1, D2, D3, D9, thinking latent).
+Source des défauts : rapport d'essais de validation Anthropic du 08/10/2026, hors dépôt (D1, D2, D3, D9, thinking latent).
 
 Rapport de mission en cours ; le détail final (tests rouge→vert, essais réels) est livré dans
-`~/Videos/Partage/20261008-correctifs-anthropic-55/code-buddy/RAPPORT.md`.
+le rapport de mission de l'auteur, hors dépôt.
 
 ## Mesures préalables sur l'endpoint réellement utilisé (`POST /v1/chat/completions`)
 
