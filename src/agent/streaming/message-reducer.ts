@@ -38,6 +38,17 @@ function appendContentParts(acc: Record<string, unknown>, parts: unknown[]): voi
 }
 
 /**
+ * Fields that identify a message or a tool call rather than carry streamed
+ * text. A provider may repeat them in EVERY delta — Anthropic's OpenAI-
+ * compatible endpoint sends `"type":"function"` with each tool_calls fragment
+ * (measured 2026-10-08, tests/fixtures/anthropic-5-5/stream-tool-call.sse) —
+ * and concatenating them gave `"type":"functionfunctionfunction"`, which the
+ * next request then answered with 400 `tool_calls.0.type: Input should be
+ * 'function'`. They keep their first value.
+ */
+const IDENTITY_KEYS = new Set(['id', 'type', 'role']);
+
+/**
  * Reduces a new streaming chunk into the previous accumulated message.
  *
  * @param previous - The previously accumulated message state
@@ -109,6 +120,10 @@ export function reduceStreamChunk(
       } else if (acc[key] === undefined || acc[key] === null) {
         acc[key] = value;
       } else if (typeof acc[key] === "string" && typeof value === "string") {
+        // A tool name is normally sent once; a provider that repeats the whole
+        // name in each delta must not double it, while a name genuinely split
+        // across deltas ("get_" + "weather") is still joined.
+        if (IDENTITY_KEYS.has(key) || (key === 'name' && value === acc[key])) continue;
         (acc[key] as string) += value;
       } else if (typeof acc[key] === "object" && typeof value === "object" && acc[key] !== null && value !== null) {
         acc[key] = reduce(acc[key] as Record<string, unknown>, value);
