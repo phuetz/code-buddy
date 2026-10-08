@@ -1,0 +1,1 @@
+{"error":{"code":"invalid_request_error","message":"To turn thinking off on this model, send \"thinking\": {\"type\": \"between_tools\"} instead of {\"type\": \"disabled\"}. The model does not think before responding. The short updates it writes between tool calls come back as thinking blocks.","type":"invalid_request_error","param":null}}
