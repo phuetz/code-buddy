@@ -9,7 +9,7 @@
  */
 
 import fs from 'fs-extra';
-import fg from 'fast-glob';
+import fg from '../utils/safe-fast-glob.js';
 
 export interface FunctionComplexity {
   name: string;

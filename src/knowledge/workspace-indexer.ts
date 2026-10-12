@@ -11,7 +11,7 @@ import fs from 'fs-extra';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
-import glob from 'fast-glob';
+import glob from '../utils/safe-fast-glob.js';
 import { EmbeddingProvider } from '../embeddings/embedding-provider.js';
 import type { VectorSearchResult } from '../search/usearch-index.js';
 import { readJsonAtomicSync, writeJsonAtomic, writeJsonAtomicSync } from '../utils/atomic-write.js';

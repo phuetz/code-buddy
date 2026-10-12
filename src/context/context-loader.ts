@@ -1,7 +1,7 @@
 import _fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
-import fg from 'fast-glob';
+import fg from '../utils/safe-fast-glob.js';
 import ignore, { Ignore } from 'ignore';
 
 const glob = fg.glob || fg;
