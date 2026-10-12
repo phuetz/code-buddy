@@ -1,5 +1,9 @@
 # Code Buddy 2 — mémoire, apprentissage et coopération
 
+<p align="center">
+  <a href="docs/assets/infographic-code-buddy-2.webp"><img src="docs/assets/infographic-code-buddy-2.webp" width="900" alt="Code Buddy 2 : les interfaces, le moteur agentique, les outils et les fournisseurs, et la boucle qui transforme une idée en amélioration"/></a>
+</p>
+
 Code Buddy peut conserver des informations utiles, proposer des leçons, réutiliser des skills et évaluer des variantes de code. Ces mécanismes agissent sur le contexte et les artefacts du système ; ils ne réentraînent pas les poids du modèle.
 
 Pour l’installation et les autres usages, consulter le [README principal](README.md). Cette présentation thématique en français, qui n’est pas une traduction intégrale du README principal, accompagne le [guide technique et ses preuves de source](docs/learning-mechanisms.md).
