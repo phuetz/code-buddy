@@ -1,0 +1,7 @@
+Date: 2026-09-29T16:33:57Z
+Révision testée: 38708b7e4edc651287c6f30623eae01c2ebb67e6
+Exécution: source du checkout via tsx, HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: UnderstandVideoTool sur clip ffmpeg local avec audio
+Observé: success=false ; transcription failed ; ModuleNotFoundError: No module named 'faster_whisper'.
+Portée: Le faux succès « Aucune parole détectée » est corrigé ; STT réel absent ici.
+Verdict: échec

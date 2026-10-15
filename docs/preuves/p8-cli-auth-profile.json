@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-auth-profile",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "203d15a88981227464c317059103de953650cbb3737ce9c4677c2d8dd006493e",
+  "artifact": "docs/preuves/p8-cli-auth-profile.log",
+  "summary": "Le profil p8-fixture est retrouvé par list puis supprimé."
+}

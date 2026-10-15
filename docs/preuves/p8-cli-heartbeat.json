@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-heartbeat",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "1ea4abbc195c0cb93e7b9f5c072de56c68ea2b0e1003311f01e74ace986d0eb4",
+  "artifact": "docs/preuves/p8-cli-heartbeat.log",
+  "summary": "Suppressed (HEARTBEAT_OK), code 0."
+}
