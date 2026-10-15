@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { forceLinuxWithoutDisplay } from '../setup/platform-fixtures.js';
 import { parseKeyCombination, captureScreenshotNative, executeGuiAction, guiControl } from '../../src/tools/gui-tool.js';
+import { GuiControlTool } from '../../src/tools/registry/gui-tools.js';
 
 // ============================================================================
 // Mocks
@@ -201,6 +203,108 @@ describe('executeGuiAction', () => {
     const result = await executeGuiAction({ action: 'find_element', description: 'Submit button' });
     expect(result.success).toBe(true);
     expect(result.screenshot).toBeTruthy();
+  });
+});
+
+describe('find_element with an explicit element-tree provider', () => {
+  let restorePlatform: () => void;
+
+  beforeEach(() => {
+    restorePlatform = forceLinuxWithoutDisplay();
+    vi.mocked(execFileSync).mockClear();
+  });
+
+  afterEach(() => {
+    restorePlatform();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('resolves a named child from a tree without a display or screenshot command', async () => {
+    expect(process.env.DISPLAY).toBeUndefined();
+    expect(process.env.WAYLAND_DISPLAY).toBeUndefined();
+    const provider = vi.fn(async () => ({
+      role: 'window', name: 'Example', children: [
+        { role: 'button', name: 'Cancel', bounds: { x: 10, y: 20, width: 60, height: 30 } },
+        { role: 'button', name: 'Submit', bounds: { x: 80, y: 100, width: 40, height: 20 } },
+      ],
+    }));
+
+    const result = await executeGuiAction(
+      { action: 'find_element', description: 'Submit button' },
+      { elementTreeProvider: provider },
+    );
+
+    expect(provider).toHaveBeenCalledOnce();
+    expect(result).toEqual({ success: true, elementFound: { x: 100, y: 110, confidence: 1 } });
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it('uses the same provider through the registered tool adapter', async () => {
+    const tool = new GuiControlTool(async () => ({
+      role: 'button', name: 'Submit', bounds: { x: 80, y: 100, width: 40, height: 20 },
+    }));
+
+    const result = await tool.execute({ action: 'find_element', description: 'Submit button' });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('Element found at (100, 110) confidence=1.00.');
+    expect(execFileSync).not.toHaveBeenCalled();
+  });
+
+  it('ignores a global dummy provider and preserves the default screenshot path', async () => {
+    const hiddenProvider = vi.fn(() => ({ x: 999, y: 999, confidence: 1 }));
+    vi.stubGlobal('__CODEBUDDY_DUMMY_PROVIDER', hiddenProvider);
+    vi.mocked(readFileSync).mockReturnValue(Buffer.from('SCREEN'));
+
+    const result = await new GuiControlTool().execute({
+      action: 'find_element', description: 'Submit button',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain('Screenshot captured');
+    expect(result.output).not.toContain('Element found');
+    expect(hiddenProvider).not.toHaveBeenCalled();
+  });
+
+  it('reports a missing screenshot backend without exposing a raw spawn error', async () => {
+    vi.mocked(execFileSync).mockImplementation(() => {
+      const error = new Error('missing') as NodeJS.ErrnoException;
+      error.code = 'ENOENT';
+      throw error;
+    });
+
+    const result = await new GuiControlTool().execute({
+      action: 'find_element', description: 'Submit button',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/GUI backend not available/);
+  });
+
+  it('does not accept invalid coordinates from a provider', async () => {
+    const result = await executeGuiAction(
+      { action: 'find_element', description: 'Submit button' },
+      { elementTreeProvider: async () => ({
+        role: 'button', name: 'Submit', bounds: { x: Number.NaN, y: 100, width: 40, height: 20 },
+      }) },
+    );
+
+    expect(result.elementFound).toBeUndefined();
+    expect(result.success).toBe(false);
+  });
+
+  it('does not guess when two elements have the same name and role', async () => {
+    const result = await executeGuiAction(
+      { action: 'find_element', description: 'Submit button' },
+      { elementTreeProvider: async () => ({ role: 'window', name: 'Example', children: [
+        { role: 'button', name: 'Submit', bounds: { x: 0, y: 0, width: 20, height: 20 } },
+        { role: 'button', name: 'Submit', bounds: { x: 80, y: 100, width: 40, height: 20 } },
+      ] }) },
+    );
+
+    expect(result.elementFound).toBeUndefined();
+    expect(result.success).toBe(false);
   });
 });
 
