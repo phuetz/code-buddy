@@ -10,6 +10,8 @@ import type {
   MaisonProvenanceKind,
   MaisonSnapshot,
 } from './maison-types.js';
+import type { TFunction } from 'i18next';
+import { frenchT } from '../../i18n/translator.js';
 
 export const DEFAULT_MAISON_MODES: readonly MaisonMode[] = [
   'normal',
@@ -352,6 +354,7 @@ export function buildMaisonCardModel(
   snapshot: MaisonSnapshot | null | undefined,
   status: MaisonDataStatus | undefined,
   now = Date.now(),
+  t: TFunction = frenchT,
 ): MaisonCardModel {
   const effectiveStatus = normalizedStatus(snapshot, status);
   const day = presentDay(snapshot?.day);
@@ -363,7 +366,7 @@ export function buildMaisonCardModel(
     snapshot?.presence?.state ?? 'unknown',
   );
 
-  return {
+  const model: MaisonCardModel = {
     status: effectiveStatus,
     ...narrative,
     day,
@@ -373,5 +376,61 @@ export function buildMaisonCardModel(
     meal: presentMeal(snapshot?.nextMeal),
     actionsDisabled: effectiveStatus !== 'ready',
     stateMessage: stateMessage(effectiveStatus, Boolean(snapshot)),
+  };
+  if (t === frenchT) return model;
+
+  const dayKind = snapshot?.day?.kind ?? 'unknown';
+  const presenceState = snapshot?.presence?.state ?? 'unknown';
+  const modeKind = snapshot?.mode ?? 'unknown';
+  const narrativeKind = modeKind === 'silent' || modeKind === 'cooking' || modeKind === 'guests'
+    || modeKind === 'rest' || modeKind === 'focus'
+    ? modeKind
+    : presenceState === 'away' || modeKind === 'away'
+      ? 'away'
+      : modeKind === 'free-day' || dayKind === 'weekend' || dayKind === 'holiday'
+        ? 'free-day'
+        : modeKind === 'unknown' ? 'unknown' : 'normal';
+  const sourceKind = snapshot?.provenance?.kind ?? 'unknown';
+  const sourceLabel = snapshot?.provenance?.label?.trim() || t(`maisonCard.model.source.${sourceKind}`);
+  const observed = parseObservedAt(snapshot?.provenance?.observedAt);
+  const minutes = observed === null ? null : Math.floor(Math.max(0, now - observed) / 60_000);
+  const ageLabel = minutes === null ? t('maisonCard.model.ageUnknown')
+    : minutes < 1 ? t('maisonCard.model.ageNow')
+      : minutes < 60 ? t('maisonCard.model.ageMinutes', { count: minutes })
+        : minutes < 1440 ? t('maisonCard.model.ageHours', { count: Math.floor(minutes / 60) })
+          : t('maisonCard.model.ageDays', { count: Math.floor(minutes / 1440) });
+  const meal = model.meal && snapshot?.nextMeal ? {
+    ...model.meal,
+    whenLabel: snapshot.nextMeal.whenLabel?.trim() || t('maisonCard.model.nextMeal'),
+    detail: snapshot.nextMeal.detail?.trim() || t('maisonCard.model.mealDetail'),
+    originLabel: t(`maisonCard.model.origin.${snapshot.nextMeal.origin ?? 'unknown'}`),
+  } : null;
+  return {
+    ...model,
+    headline: t(`maisonCard.model.narrative.${narrativeKind}.headline`),
+    summary: t(`maisonCard.model.narrative.${narrativeKind}.summary`),
+    day: {
+      ...model.day,
+      label: snapshot?.day?.label?.trim()
+        || (dayKind === 'holiday' && snapshot?.day?.holidayName?.trim()
+          ? t('maisonCard.model.holidayWithName', { name: snapshot.day.holidayName.trim() })
+          : t(`maisonCard.model.day.${dayKind}.label`)),
+      detail: t(`maisonCard.model.day.${dayKind}.detail`),
+    },
+    presence: {
+      ...model.presence,
+      label: presenceState === 'present' && snapshot?.presence?.displayName?.trim()
+        ? t('maisonCard.model.personPresent', { name: snapshot.presence.displayName.trim() })
+        : t(`maisonCard.model.presence.${presenceState}.label`),
+      detail: snapshot?.presence?.detail?.trim() || t(`maisonCard.model.presence.${presenceState}.detail`),
+    },
+    mode: {
+      ...model.mode,
+      label: t(`maisonCard.model.mode.${modeKind}.label`),
+      detail: t(`maisonCard.model.mode.${modeKind}.detail`),
+    },
+    provenance: { ...model.provenance, sourceLabel, ageLabel, combinedLabel: `${sourceLabel} · ${ageLabel}` },
+    meal,
+    stateMessage: effectiveStatus === 'ready' ? null : t(`maisonCard.model.state.${effectiveStatus}.${snapshot ? 'known' : 'empty'}`),
   };
 }

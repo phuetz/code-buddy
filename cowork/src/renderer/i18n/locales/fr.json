@@ -3467,5 +3467,470 @@
         "prerequisites": ""
       }
     }
+  },
+  "livingBriefing": {
+    "goodMorning": "Bonjour",
+    "goodAfternoon": "Bon après-midi",
+    "goodEvening": "Bonsoir",
+    "sinceLastNight": "Depuis hier soir",
+    "sinceThisMorning": "Depuis ce matin",
+    "last18Hours": "Ces 18 dernières heures",
+    "outcomeBlocked": "Point laissé en revue",
+    "outcomeCompleted": "Mission terminée",
+    "outcomeError": "Passage interrompu",
+    "outcomeFailed": "Passage à vérifier",
+    "outcomeGoalComplete": "Objectif atteint",
+    "outcomeGoalContinued": "Objectif poursuivi",
+    "outcomeIdle": "Veille active",
+    "outcomeSelfImproved": "Amélioration retenue",
+    "outcomeDefault": "Passage autonome",
+    "daemonActive": "Boucle active",
+    "daemonPaused": "Boucle en pause",
+    "statSessions": "Sessions",
+    "statAgents": "Agents",
+    "statToReview": "À voir",
+    "statCompleted": "Terminées",
+    "statEvolutions": "Évolutions",
+    "statInProgress": "En cours",
+    "statPaid": "Payant",
+    "statAdvanced": "Avancées",
+    "activityCowork": "Activité Cowork",
+    "sessionUpdated": "Session mise à jour",
+    "sessionToResume": "Session à reprendre",
+    "sessionUpdatedLong": "Session Cowork mise à jour",
+    "headlineAdvancedWithPoint": "J’ai avancé, avec un point à regarder",
+    "headlineAdvanced": "J’ai avancé pendant ton absence",
+    "headlineCalm": "Tout est calme, je veille",
+    "headlineReady": "Je suis prêt à reprendre avec toi",
+    "headlineGathering": "Je rassemble le fil de notre travail",
+    "autonomousPassDocumented": "Passage autonome documenté",
+    "relayLoaded": "Relève chargée",
+    "relayProbative": "Relève probante",
+    "relayReadyWithPoint": "La relève est prête, avec un point à regarder",
+    "headlineWatchedAndCalm": "J’ai veillé, tout est resté calme",
+    "stateInProgress": "État en cours",
+    "agentWord": "{{count}} agent présent",
+    "daemonConnectionUnknown": "La connexion au daemon est inconnue.",
+    "daemonSuspended": "La boucle est suspendue.",
+    "daemonActiveWithAgents": "La boucle autonome est active avec {{count}} {{agentWord}}.",
+    "eventSummaryNewWork": "J’ai relevé {{progressCount}} avancée concrète, {{recentSessionsCount}} session mise à jour et {{agents}} agent de la boucle, {{completed}} tâche terminée et {{selfImproved}} amélioration retenue",
+    "eventSummaryNoNewWork": "Aucun événement récent n’exige ton attention. Le contexte reste prêt pour la prochaine mission.",
+    "fallbackEventSummaryNewWork": "J’ai relevé {{progressCount}} avancée concrète, {{recentSessionsCount}} session mise à jour et {{agents}} agent actif.",
+    "fallbackEventSummaryNoNewWork": "Aucun événement récent n’exige ton attention.",
+    "baseSummaryCompletedTasks": "La boucle autonome a complété {{count}} tâche.",
+    "attentionRequired": "J’ai isolé un point qui requiert ton attention avant de poursuivre.",
+    "nextReady": "La suite est préparée.",
+    "taskPriorityHigh": "Prioritaire pour la prochaine relève.",
+    "taskReadyForLoop": "Prêt pour la boucle autonome.",
+    "taskNextMission": "Prochaine mission {{priority}}",
+    "taskPriorityPlanned": "planifiée",
+    "byAgent": "Par {{agent}}",
+    "holidayWithName": "Jour férié : {{name}}",
+    "holiday": "Jour férié",
+    "weekend": "Week-end",
+    "workday": "Journée de travail",
+    "dayToConfirm": "Journée à confirmer",
+    "foodNote": " {{count}} contrainte alimentaire reste à confirmer.",
+    "timerDueLabel": "Un minuteur est terminé",
+    "timerDueDetail": "Une confirmation explicite arrêtera la répétition.",
+    "timerDueSpoken": "Un minuteur de cuisine est terminé et attend ta confirmation.",
+    "modeSilentLabel": "Maison silencieuse",
+    "modeSilentDetail": "Aucune initiative sonore tant que tu ne réactives pas la voix.",
+    "modeRestLabel": "Repos protégé",
+    "modeRestDetail": "Les suggestions spontanées restent en attente.",
+    "modeFocusLabel": "Concentration protégée",
+    "modeFocusDetail": "Seules les demandes directes passent au premier plan.",
+    "timerActiveNote": " {{count}} minuteur reste actif.",
+    "modeGuestsLabel": "Mode invités actif",
+    "modeGuestsDetail": "Les détails personnels restent masqués.",
+    "modeGuestsSpoken": "Le mode invités est actif et les détails personnels restent masqués.",
+    "modeAwayLabel": "Maison en veille discrète",
+    "modeAwayDetail": "La présence locale n’est pas supposée.",
+    "modeAwaySpoken": "La maison reste en veille discrète sans supposer ta présence.",
+    "noMealPlanned": "Aucun repas n’est encore planifié.",
+    "lightDay": "Journée légère",
+    "normalDay": "Maison au rythme normal",
+    "kitchenTimerActiveNote": " {{count}} minuteur de cuisine actif.",
+    "nextMealPlanned": "Le prochain repas prévu est {{mealTitle}}.",
+    "nothingUrgentPlanned": "Rien d’urgent n’est prévu côté maison.",
+    "agentWord_one": "{{count}} agent présent",
+    "agentWord_other": "{{count}} agents présents",
+    "eventSummaryNewWork_one": "J’ai relevé {{progressCount}} avancée concrète, {{recentSessionsCount}} session mise à jour et {{agents}} agent de la boucle, {{completed}} tâche terminée et {{selfImproved}} amélioration retenue",
+    "eventSummaryNewWork_other": "J’ai relevé {{progressCount}} avancées concrètes, {{recentSessionsCount}} sessions mises à jour et {{agents}} agents de la boucle, {{completed}} tâches terminées et {{selfImproved}} améliorations retenues",
+    "fallbackEventSummaryNewWork_one": "J’ai relevé {{progressCount}} avancée concrète, {{recentSessionsCount}} session mise à jour et {{agents}} agent actif.",
+    "fallbackEventSummaryNewWork_other": "J’ai relevé {{progressCount}} avancées concrètes, {{recentSessionsCount}} sessions mises à jour et {{agents}} agents actifs.",
+    "baseSummaryCompletedTasks_one": "La boucle autonome a complété {{count}} tâche.",
+    "baseSummaryCompletedTasks_other": "La boucle autonome a complété {{count}} tâches.",
+    "foodNote_one": " {{count}} contrainte alimentaire reste à confirmer.",
+    "foodNote_other": " {{count}} contraintes alimentaires restent à confirmer.",
+    "timerDueLabel_one": "Un minuteur est terminé",
+    "timerDueLabel_other": "{{count}} minuteurs sont terminés",
+    "timerDueSpoken_one": "Un minuteur de cuisine est terminé et attend ta confirmation.",
+    "timerDueSpoken_other": "{{count}} minuteurs de cuisine sont terminés et attendent ta confirmation.",
+    "timerActiveNote_one": " {{count}} minuteur reste actif.",
+    "timerActiveNote_other": " {{count}} minuteurs restent actifs.",
+    "kitchenTimerActiveNote_one": " {{count}} minuteur de cuisine actif.",
+    "kitchenTimerActiveNote_other": " {{count}} minuteurs de cuisine actifs.",
+    "taskAlreadyRunning": "Déjà en cours dans la boucle autonome.",
+    "fallbackSummaryWork": "{{advances}}, {{sessions}} et {{agents}}.",
+    "fallbackSummaryActive": "La boucle autonome est active avec {{count}} agent présent. Aucun événement récent n’exige ton attention.",
+    "fallbackSummaryActive_other": "La boucle autonome est active avec {{count}} agents présents. Aucun événement récent n’exige ton attention.",
+    "advanceCount_one": "{{count}} avancée concrète",
+    "advanceCount_other": "{{count}} avancées concrètes",
+    "sessionCount_one": "{{count}} session mise à jour",
+    "sessionCount_other": "{{count}} sessions mises à jour",
+    "agentStandbyCount_one": "{{count}} agent en veille",
+    "agentStandbyCount_other": "{{count}} agents en veille",
+    "nextIntention": " Prochaine intention : {{title}}.",
+    "worklogResult": "Résultat consigné dans le worklog",
+    "opportunityToReview": "Opportunité à examiner",
+    "relayReady": "La relève est prête",
+    "artifactSummary": "{{passages}} de la boucle, {{tasks}} et {{improvements}}.",
+    "passagesCount_one": "{{count}} passage",
+    "passagesCount_other": "{{count}} passages",
+    "completedCount_one": "{{count}} tâche terminée",
+    "completedCount_other": "{{count}} tâches terminées",
+    "improvementsCount_one": "{{count}} amélioration retenue",
+    "improvementsCount_other": "{{count}} améliorations retenues",
+    "nextSafeIntention": " Prochaine intention sûre : {{title}}.",
+    "relayProbativeDate": "Relève probante · {{date}}",
+    "daemonActiveWithCount": "Boucle active · {{count}} agent",
+    "daemonActiveWithCount_other": "Boucle active · {{count}} agents",
+    "ui": {
+      "aria": "Réveil vivant de Code Buddy",
+      "loading": "Je rassemble les preuves de la relève…",
+      "refreshTitle": "Actualiser la relève",
+      "refreshDescription": "Relit le rapport autonome, les sessions et le journal d’activité sans lancer de nouvelle mission.",
+      "liveBriefing": "Réveil vivant",
+      "refreshAria": "Actualiser le briefing",
+      "homeToday": "Maison aujourd’hui",
+      "openArtifact": "Ouvrir la relève probante",
+      "artifactDescription": "Affiche le rapport Markdown produit par le daemon à partir de son ledger et de son worklog local.",
+      "evidence": "Preuves",
+      "report": "Rapport",
+      "listenTitle": "Écouter la relève",
+      "listenDescription": "Pocket TTS lit une synthèse courte ; le texte complet et les preuves restent visibles ici.",
+      "localVoice": "Voix locale",
+      "reading": "Lecture…",
+      "listen": "Écouter",
+      "missionTitle": "Entrer dans Mission Control",
+      "missionDescription": "Ouvre le cockpit complet : intention, preuves, flotte, conseil de modèles et file autonome.",
+      "pilot": "Piloter",
+      "missionControl": "Mission Control",
+      "details": "Détails",
+      "changes": "Ce qui a bougé",
+      "noEvents": "Aucun événement notable : la boucle est disponible sans inventer de travail.",
+      "nextSafe": "Prochaine intention sûre",
+      "nothingUrgent": "Rien d’urgent. Tu peux choisir librement la prochaine mission."
+    },
+    "source": {
+      "daemon": "daemon",
+      "activité": "activité",
+      "session": "session"
+    }
+  },
+  "maisonCard": {
+    "connectionStatusTitle": "État de la connexion",
+    "connectionStatusDescription": "La carte se met à jour en temps réel. Si la connexion est perdue, les actions seront temporairement indisponibles.",
+    "systemKicker": "Système",
+    "statusOffline": "Hors ligne",
+    "statusUnknown": "Inconnu",
+    "statusReady": "Prêt",
+    "dayTypeLabel": "Type de journée",
+    "presenceLabel": "Présence",
+    "modeLabel": "Mode Maison",
+    "noMealPlanned": "Aucun repas prévu",
+    "mealDetailDefault": "Une proposition pratique, à confirmer au moment de cuisiner.",
+    "noMealToPrepare": "Rien à préparer pour le moment.",
+    "mealStatePlanned": "Prévu",
+    "mealStateCooked": "Cuisiné",
+    "mealOriginLeftovers": "Avec les restes",
+    "mealOriginPantry": "Depuis les réserves",
+    "mealOriginDelivery": "À commander",
+    "mealOriginUnknown": "Origine à confirmer",
+    "refreshTitle": "Rafraîchir les données",
+    "syncKicker": "Synchronisation",
+    "stopCookingTitle": "Arrêter de cuisiner",
+    "startCookingTitle": "Annoncer que tu cuisines",
+    "cookingDescription": "Préviens la maison pour adapter la musique, le comportement des minuteurs et suspendre les suggestions externes.",
+    "contextKicker": "Contexte",
+    "change": "Changer",
+    "cook": "Cuisiner",
+    "disableGuestsTitle": "Désactiver le mode invités",
+    "enableGuestsTitle": "Activer le mode invités",
+    "guestsDescription": "Ce mode masque les événements personnels (calendrier, rendez-vous) et bloque les annonces vocales liées au profil du foyer.",
+    "privacyKicker": "Confidentialité",
+    "guestsActive": "Invités actifs",
+    "guests": "Invités",
+    "unmuteTitle": "Réactiver les propositions sonores",
+    "muteTitle": "Demander le silence",
+    "muteDescription": "Le silence suspend toute initiative vocale. Les informations peuvent rester visibles sans interrompre la maison.",
+    "quietModeKicker": "Quiet mode",
+    "unmute": "Réactiver",
+    "silence": "Silence",
+    "persistentTimers": "Minuteurs persistants",
+    "timerDue": "terminé",
+    "timerRemaining": "{{minutes}} min",
+    "ackTimerTitle": "Acquitter ce minuteur",
+    "ackTimerDescription": "Confirme que tu as vu ou entendu l’alerte. Le minuteur ne se répétera plus.",
+    "kitchenKicker": "Cuisine",
+    "ackTimerAria": "Acquitter le minuteur {{label}}",
+    "cancelTimerAria": "Annuler le minuteur {{label}}",
+    "privateMealProfileTitle": "Profil repas privé",
+    "privateMealProfileDescription": "Seul un résumé est affiché ici. Les contraintes détaillées restent chiffrées localement et ne sont jamais ajoutées au profil général.",
+    "encryptedMealProfile": "Profil repas chiffré",
+    "explicitConstraints": "{{count}} contrainte explicite",
+    "toConfirm": "{{count}} à confirmer",
+    "allConfirmed": "toutes confirmées",
+    "dayLabel": {
+      "holiday": "Jour férié",
+      "weekend": "Week-end",
+      "workday": "Jour de travail",
+      "unknown": "Type inconnu",
+      "free-day": "Journée libre"
+    },
+    "dayDetail": {
+      "holiday": "Le temps peut rester vraiment libre",
+      "weekend": "Un rythme plus léger, sans urgence ajoutée.",
+      "workday": "Des propositions plus encadrées et ponctuelles.",
+      "unknown": "Le rythme de la journée n’est pas encore clair.",
+      "free-day": "Une aide douce est disponible, sans transformer cette journée en liste de tâches."
+    },
+    "presence": {
+      "present": "{{name}} est là",
+      "away": "Personne",
+      "unknown": "Présence incertaine"
+    },
+    "presenceDetail": {
+      "present": "Présent",
+      "away": "Aucune présence détectée ce jour.",
+      "unknown": "La maison attend un signe de vie."
+    },
+    "mode": {
+      "normal": {
+        "label": "Rythme normal",
+        "detail": "La maison suit son cours."
+      },
+      "free-day": {
+        "label": "Journée libre",
+        "detail": "Des idées douces, sans transformer la journée en tâches."
+      },
+      "focus": {
+        "label": "Concentration",
+        "detail": "Seules les choses importantes passent."
+      },
+      "rest": {
+        "label": "Repos protégé",
+        "detail": "Les suggestions sont en pause."
+      },
+      "silent": {
+        "label": "Silence",
+        "detail": "Aucune initiative vocale ne sera prise."
+      },
+      "guests": {
+        "label": "Invités",
+        "detail": "Les éléments personnels restent masqués."
+      },
+      "cooking": {
+        "label": "En cuisine",
+        "detail": "La musique et les suggestions s’adaptent au repas."
+      },
+      "away": {
+        "label": "En veille",
+        "detail": "La maison repose tranquillement."
+      }
+    },
+    "model": {
+      "holidayWithName": "Férié · {{name}}",
+      "personPresent": "{{name}} est là",
+      "ageUnknown": "heure inconnue",
+      "ageNow": "à l’instant",
+      "ageMinutes": "il y a {{count}} min",
+      "ageHours": "il y a {{count}} h",
+      "ageDays": "il y a {{count}} j",
+      "nextMeal": "Prochain repas",
+      "mealDetail": "Une proposition pratique, à confirmer au moment de cuisiner.",
+      "source": {
+        "manual": "Réglage manuel",
+        "calendar": "Calendrier local",
+        "presence": "Présence locale",
+        "companion": "Companion local",
+        "sensor": "Capteurs locaux",
+        "derived": "Contexte déduit",
+        "unknown": "Source inconnue"
+      },
+      "origin": {
+        "manual": "Choisi par toi",
+        "leftovers": "Avec les restes",
+        "recipe": "Idée recette",
+        "calendar": "Prévu au calendrier",
+        "unknown": "Origine à confirmer"
+      },
+      "state": {
+        "loading": {
+          "known": "Actualisation du contexte Maison…",
+          "empty": "Préparation du contexte Maison…"
+        },
+        "offline": {
+          "known": "Maison est hors ligne : le dernier état connu reste visible, sans action possible.",
+          "empty": "Maison est hors ligne et aucun état local n’est encore disponible."
+        },
+        "unknown": {
+          "known": "Certains signaux restent à confirmer avant toute initiative.",
+          "empty": "Aucun contexte Maison n’est encore disponible. Code Buddy reste silencieux par défaut."
+        }
+      },
+      "narrative": {
+        "silent": {
+          "headline": "La maison reste silencieuse",
+          "summary": "Aucune initiative sonore. Les informations utiles peuvent attendre ici sans interrompre."
+        },
+        "cooking": {
+          "headline": "La cuisine est prête à t’accompagner",
+          "summary": "Étapes courtes, minuteurs nommés et réponses mains libres restent au premier plan."
+        },
+        "guests": {
+          "headline": "La maison accueille sans dévoiler le privé",
+          "summary": "Souvenirs, messages et projets personnels restent masqués tant que le mode invités est actif."
+        },
+        "rest": {
+          "headline": "Un moment calme, sans sollicitation",
+          "summary": "Code Buddy reste disponible si tu l’appelles et retient toutes les suggestions spontanées."
+        },
+        "focus": {
+          "headline": "La maison protège ton attention",
+          "summary": "Seules les demandes directes et les événements réellement importants passent au premier plan."
+        },
+        "away": {
+          "headline": "La maison veille discrètement",
+          "summary": "Aucune prise de parole personnelle tant que ta présence n’est pas confirmée."
+        },
+        "free-day": {
+          "headline": "Le temps peut rester vraiment libre",
+          "summary": "Une aide douce est disponible, sans transformer cette journée en liste de tâches."
+        },
+        "unknown": {
+          "headline": "Le contexte Maison se précise",
+          "summary": "Code Buddy ne suppose ni ton rythme ni ta présence tant que les signaux ne sont pas confirmés."
+        },
+        "normal": {
+          "headline": "Tout est calme à la maison",
+          "summary": "Code Buddy reste disponible avec une proactivité mesurée et des actions toujours explicites."
+        }
+      },
+      "day": {
+        "workday": {
+          "label": "Journée de travail",
+          "detail": "Le rythme habituel reste disponible."
+        },
+        "weekend": {
+          "label": "Week-end",
+          "detail": "Un rythme plus léger, sans urgence ajoutée."
+        },
+        "holiday": {
+          "label": "Jour férié",
+          "detail": "La maison privilégie le calme et le temps libre."
+        },
+        "unknown": {
+          "label": "Jour à confirmer",
+          "detail": "Aucun rythme n’est supposé sans source fiable."
+        }
+      },
+      "presence": {
+        "present": {
+          "label": "Présence confirmée",
+          "detail": "Les interactions locales peuvent être proposées."
+        },
+        "away": {
+          "label": "Maison inoccupée",
+          "detail": "Aucune prise de parole personnelle."
+        },
+        "unknown": {
+          "label": "Présence inconnue",
+          "detail": "Code Buddy reste discret par défaut."
+        }
+      },
+      "mode": {
+        "normal": {
+          "label": "Rythme normal",
+          "detail": "La maison suit son cours."
+        },
+        "free-day": {
+          "label": "Journée libre",
+          "detail": "Des idées douces, sans transformer la journée en tâches."
+        },
+        "focus": {
+          "label": "Concentration",
+          "detail": "Seules les choses importantes passent."
+        },
+        "rest": {
+          "label": "Repos protégé",
+          "detail": "Les suggestions sont en pause."
+        },
+        "silent": {
+          "label": "Silence",
+          "detail": "Aucune initiative vocale ne sera prise."
+        },
+        "guests": {
+          "label": "Invités",
+          "detail": "Les éléments personnels restent masqués."
+        },
+        "cooking": {
+          "label": "En cuisine",
+          "detail": "La musique et les suggestions s’adaptent au repas."
+        },
+        "away": {
+          "label": "En veille",
+          "detail": "La maison repose tranquillement."
+        },
+        "unknown": {
+          "label": "Mode inconnu",
+          "detail": "Le contexte n’a pas encore été confirmé."
+        }
+      }
+    },
+    "ui": {
+      "change": "Changer",
+      "statusReady": "Prêt",
+      "statusLoading": "Actualisation",
+      "statusOffline": "Hors ligne",
+      "statusUnknown": "À confirmer",
+      "homeContext": "Contexte Maison",
+      "changeRhythmTitle": "Changer le rythme de la maison",
+      "changeRhythmDescription": "Choisis un contexte explicite. Aucun mode n’est déduit ou activé silencieusement depuis cette carte.",
+      "control": "Contrôle",
+      "chooseMode": "Choisir le mode Maison",
+      "homeRhythm": "Rythme de la maison",
+      "changeLocal": "Le changement reste local et immédiatement réversible.",
+      "home": "Maison",
+      "provenanceTitle": "D’où vient ce contexte ?",
+      "provenanceDescription": "Cette indication distingue un réglage manuel, le calendrier ou un signal local, et montre quand il a été observé.",
+      "transparency": "Transparence",
+      "refreshHome": "Actualiser Maison",
+      "refreshDescription": "Relit les signaux déjà autorisés. Cette action ne change aucun mode et ne démarre aucune routine.",
+      "dayType": "Type de journée",
+      "dayTooltip": "Le calendrier et les jours fériés décrivent le rythme possible ; ils ne prouvent jamais à eux seuls que tu es disponible.",
+      "presence": "Présence",
+      "presenceTooltip": "La présence est affichée séparément du mode. En cas de doute, Code Buddy choisit le silence et ne révèle rien de personnel.",
+      "homeMode": "Mode Maison",
+      "modeTooltip": "Le mode règle la proactivité et la confidentialité. Il reste toujours modifiable et immédiatement réversible.",
+      "nextMeal": "Prochain repas",
+      "noMeal": "Rien n’est encore prévu",
+      "mealPrompt": "Demande une idée avec ce qui est réellement disponible, sans objectif médical ni jugement.",
+      "planned": "Prévu",
+      "suggestion": "Suggestion",
+      "toChoose": "À choisir",
+      "homeActions": "Actions Maison",
+      "handsFreeTitle": "Passer en cuisine mains libres",
+      "handsFreeDescription": "Ouvre l’expérience dédiée aux étapes courtes, substitutions explicites et minuteurs nommés. Aucun repas n’est lancé automatiquement.",
+      "kitchen": "Cuisine",
+      "cookingActive": "Cuisine active",
+      "cook": "Cuisiner",
+      "leaveGuests": "Quitter le mode invités",
+      "protectGuests": "Protéger la vie privée des invités",
+      "guestsDescription": "Le mode invités masque souvenirs, messages et projets personnels. Il ne mémorise personne sans consentement."
+    },
+    "explicitConstraints_one": "{{count}} contrainte explicite",
+    "explicitConstraints_other": "{{count}} contraintes explicites"
   }
 }

@@ -33,10 +33,11 @@ import {
 } from 'lucide-react';
 
 import { GuidedTooltip } from '../Tooltip';
+import type { TFunction } from 'i18next';
+import { useCoworkTranslation } from '../../i18n/translator.js';
 import {
   buildMaisonCardModel,
   DEFAULT_MAISON_MODES,
-  MAISON_MODE_PRESENTATION,
   type MaisonContextPresentation,
   type MaisonFreshness,
   type MaisonTone,
@@ -75,21 +76,21 @@ function freshnessClasses(freshness: MaisonFreshness): string {
   return 'text-text-muted';
 }
 
-function statusPresentation(status: MaisonDataStatus): {
+function statusPresentation(status: MaisonDataStatus, t: TFunction): {
   icon: LucideIcon;
   label: string;
   className: string;
 } {
   if (status === 'ready') {
-    return { icon: ShieldCheck, label: 'Prêt', className: 'border-success/20 bg-success/5 text-success' };
+    return { icon: ShieldCheck, label: t('maisonCard.ui.statusReady'), className: 'border-success/20 bg-success/5 text-success' };
   }
   if (status === 'loading') {
-    return { icon: Loader2, label: 'Actualisation', className: 'border-accent/20 bg-accent/5 text-accent' };
+    return { icon: Loader2, label: t('maisonCard.ui.statusLoading'), className: 'border-accent/20 bg-accent/5 text-accent' };
   }
   if (status === 'offline') {
-    return { icon: CloudOff, label: 'Hors ligne', className: 'border-warning/25 bg-warning/10 text-warning' };
+    return { icon: CloudOff, label: t('maisonCard.ui.statusOffline'), className: 'border-warning/25 bg-warning/10 text-warning' };
   }
-  return { icon: CircleHelp, label: 'À confirmer', className: 'border-border bg-background/60 text-text-muted' };
+  return { icon: CircleHelp, label: t('maisonCard.ui.statusUnknown'), className: 'border-border bg-background/60 text-text-muted' };
 }
 
 function dayIcon(kind: MaisonDayKind): LucideIcon {
@@ -118,9 +119,10 @@ function ContextTile({
   testId: string;
   tooltip: string;
 }) {
+  const t = useCoworkTranslation();
   return (
     <div className="min-w-0 [&>span]:flex [&>span]:h-full [&>span]:w-full">
-      <GuidedTooltip title={eyebrow} description={tooltip} kicker="Contexte Maison" side="top">
+      <GuidedTooltip title={eyebrow} description={tooltip} kicker={t('maisonCard.ui.homeContext')} side="top">
         <div
           className={`flex h-full w-full min-w-0 items-start gap-2.5 rounded-2xl border p-3 ${toneClasses(value.tone)}`}
           data-testid={testId}
@@ -150,6 +152,7 @@ function ModePicker({
   disabled: boolean;
   onChange: (mode: MaisonMode) => void;
 }) {
+  const t = useCoworkTranslation();
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -218,7 +221,7 @@ function ModePicker({
       data-testid="maison-change-mode"
     >
       <Sparkles className="h-4 w-4" aria-hidden="true" />
-      Changer
+      {t('maisonCard.ui.change')}
       <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
     </button>
   );
@@ -226,9 +229,9 @@ function ModePicker({
   return (
     <div ref={rootRef} className="relative [&>span]:flex [&>span]:w-full">
       <GuidedTooltip
-        title="Changer le rythme de la maison"
-        description="Choisis un contexte explicite. Aucun mode n’est déduit ou activé silencieusement depuis cette carte."
-        kicker="Contrôle"
+        title={t('maisonCard.ui.changeRhythmTitle')}
+        description={t('maisonCard.ui.changeRhythmDescription')}
+        kicker={t('maisonCard.ui.control')}
         side="top"
       >
         {trigger}
@@ -238,18 +241,17 @@ function ModePicker({
         <div
           id={menuId}
           role="menu"
-          aria-label="Choisir le mode Maison"
+          aria-label={t('maisonCard.ui.chooseMode')}
           onKeyDown={onMenuKeyDown}
           className="absolute bottom-full left-0 z-30 mb-2 max-h-[420px] w-[calc(200%+0.5rem)] overflow-y-auto rounded-2xl border border-border bg-surface p-2 shadow-elevated animate-slide-up sm:bottom-auto sm:top-full sm:mb-0 sm:mt-2 sm:max-h-none sm:w-[min(390px,calc(100vw-32px))] sm:overflow-visible"
           data-testid="maison-mode-menu"
         >
           <div className="px-2 pb-2 pt-1">
-            <div className="text-xs font-semibold text-text-primary">Rythme de la maison</div>
-            <div className="mt-0.5 text-[10px] text-text-muted">Le changement reste local et immédiatement réversible.</div>
+            <div className="text-xs font-semibold text-text-primary">{t('maisonCard.ui.homeRhythm')}</div>
+            <div className="mt-0.5 text-[10px] text-text-muted">{t('maisonCard.ui.changeLocal')}</div>
           </div>
           <div className="grid gap-1 sm:grid-cols-2">
             {options.map((mode, index) => {
-              const option = MAISON_MODE_PRESENTATION[mode];
               const Icon = MODE_ICONS[mode];
               const selected = currentMode === mode;
               return (
@@ -270,8 +272,8 @@ function ModePicker({
                 >
                   <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${selected ? 'text-accent' : 'text-text-muted'}`} aria-hidden="true" />
                   <span className="min-w-0">
-                    <span className="block text-[11px] font-semibold text-text-primary">{option.label}</span>
-                    <span className="mt-0.5 block line-clamp-2 text-[9px] leading-relaxed text-text-muted">{option.detail}</span>
+                    <span className="block text-[11px] font-semibold text-text-primary">{t(`maisonCard.model.mode.${mode}.label`)}</span>
+                    <span className="mt-0.5 block line-clamp-2 text-[9px] leading-relaxed text-text-muted">{t(`maisonCard.model.mode.${mode}.detail`)}</span>
                   </span>
                 </button>
               );
@@ -295,10 +297,11 @@ export function MaisonCard({
   onGuestsChange,
   onRefresh,
 }: MaisonCardProps) {
+  const t = useCoworkTranslation();
   const titleId = useId();
-  const model = buildMaisonCardModel(snapshot, status, now);
-  const StatusIcon = statusPresentation(model.status).icon;
-  const statusView = statusPresentation(model.status);
+  const model = buildMaisonCardModel(snapshot, status, now, t);
+  const StatusIcon = statusPresentation(model.status, t).icon;
+  const statusView = statusPresentation(model.status, t);
   const DayIcon = dayIcon(snapshot?.day?.kind ?? 'unknown');
   const PresenceIcon = presenceIcon(snapshot?.presence?.state ?? 'unknown');
   const ModeIcon = snapshot?.mode ? MODE_ICONS[snapshot.mode] : CircleHelp;
@@ -327,11 +330,11 @@ export function MaisonCard({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">Maison</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-muted">{t('maisonCard.ui.home')}</span>
               <GuidedTooltip
-                title="D’où vient ce contexte ?"
-                description="Cette indication distingue un réglage manuel, le calendrier ou un signal local, et montre quand il a été observé."
-                kicker="Transparence"
+                title={t('maisonCard.ui.provenanceTitle')}
+                description={t('maisonCard.ui.provenanceDescription')}
+                kicker={t('maisonCard.ui.transparency')}
                 side="bottom"
               >
                 <span
@@ -360,9 +363,9 @@ export function MaisonCard({
             </span>
             {onRefresh ? (
               <GuidedTooltip
-                title="Actualiser Maison"
-                description="Relit les signaux déjà autorisés. Cette action ne change aucun mode et ne démarre aucune routine."
-                kicker="Contexte"
+                title={t('maisonCard.ui.refreshHome')}
+                description={t('maisonCard.ui.refreshDescription')}
+                kicker={t('maisonCard.contextKicker')}
                 side="left"
               >
                 <button
@@ -370,7 +373,7 @@ export function MaisonCard({
                   onClick={onRefresh}
                   disabled={model.status === 'loading'}
                   className="rounded-xl p-2 text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-45"
-                  aria-label="Actualiser Maison"
+                  aria-label={t('maisonCard.ui.refreshHome')}
                   data-testid="maison-refresh"
                 >
                   <RefreshCw className={`h-4 w-4 ${model.status === 'loading' ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
@@ -400,25 +403,25 @@ export function MaisonCard({
 
         <div className={`mt-4 grid gap-2.5 sm:grid-cols-3 ${model.status === 'loading' ? 'opacity-65' : ''}`}>
           <ContextTile
-            eyebrow="Type de journée"
+            eyebrow={t('maisonCard.ui.dayType')}
             value={model.day}
             icon={DayIcon}
             testId="maison-day"
-            tooltip="Le calendrier et les jours fériés décrivent le rythme possible ; ils ne prouvent jamais à eux seuls que tu es disponible."
+            tooltip={t('maisonCard.ui.dayTooltip')}
           />
           <ContextTile
-            eyebrow="Présence"
+            eyebrow={t('maisonCard.ui.presence')}
             value={model.presence}
             icon={PresenceIcon}
             testId="maison-presence"
-            tooltip="La présence est affichée séparément du mode. En cas de doute, Code Buddy choisit le silence et ne révèle rien de personnel."
+            tooltip={t('maisonCard.ui.presenceTooltip')}
           />
           <ContextTile
-            eyebrow="Mode Maison"
+            eyebrow={t('maisonCard.ui.homeMode')}
             value={model.mode}
             icon={ModeIcon}
             testId="maison-mode"
-            tooltip="Le mode règle la proactivité et la confidentialité. Il reste toujours modifiable et immédiatement réversible."
+            tooltip={t('maisonCard.ui.modeTooltip')}
           />
         </div>
 
@@ -431,21 +434,21 @@ export function MaisonCard({
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-              {model.meal?.whenLabel ?? 'Prochain repas'}
+              {model.meal?.whenLabel ?? t('maisonCard.ui.nextMeal')}
             </div>
             <div className="mt-0.5 text-sm font-semibold text-text-primary">
-              {model.meal?.title ?? 'Rien n’est encore prévu'}
+              {model.meal?.title ?? t('maisonCard.ui.noMeal')}
             </div>
             <div className="mt-0.5 text-[10px] leading-relaxed text-text-secondary">
-              {model.meal?.detail ?? 'Demande une idée avec ce qui est réellement disponible, sans objectif médical ni jugement.'}
+              {model.meal?.detail ?? t('maisonCard.ui.mealPrompt')}
             </div>
           </div>
           <span className="w-fit shrink-0 rounded-full border border-border bg-surface px-2.5 py-1 text-[10px] font-medium text-text-muted">
-            {model.meal ? `${model.meal.planned ? 'Prévu' : 'Suggestion'} · ${model.meal.originLabel}` : 'À choisir'}
+            {model.meal ? `${model.meal.planned ? t('maisonCard.ui.planned') : t('maisonCard.ui.suggestion')} · ${model.meal.originLabel}` : t('maisonCard.ui.toChoose')}
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Actions Maison">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={t('maisonCard.ui.homeActions')}>
           <ModePicker
             currentMode={snapshot?.mode}
             options={uniqueModeOptions}
@@ -455,9 +458,9 @@ export function MaisonCard({
 
           <div className="[&>span]:flex [&>span]:w-full">
             <GuidedTooltip
-              title="Passer en cuisine mains libres"
-              description="Ouvre l’expérience dédiée aux étapes courtes, substitutions explicites et minuteurs nommés. Aucun repas n’est lancé automatiquement."
-              kicker="Cuisine"
+              title={t('maisonCard.ui.handsFreeTitle')}
+              description={t('maisonCard.ui.handsFreeDescription')}
+              kicker={t('maisonCard.ui.kitchen')}
               side="top"
             >
               <button
@@ -468,16 +471,16 @@ export function MaisonCard({
                 data-testid="maison-start-cooking"
               >
                 <CookingPot className="h-4 w-4" aria-hidden="true" />
-                {snapshot?.mode === 'cooking' ? 'Cuisine active' : 'Cuisiner'}
+                {snapshot?.mode === 'cooking' ? t('maisonCard.ui.cookingActive') : t('maisonCard.ui.cook')}
               </button>
             </GuidedTooltip>
           </div>
 
           <div className="[&>span]:flex [&>span]:w-full">
             <GuidedTooltip
-              title={guests ? 'Quitter le mode invités' : 'Protéger la vie privée des invités'}
-              description="Le mode invités masque souvenirs, messages et projets personnels. Il ne mémorise personne sans consentement."
-              kicker="Confidentialité"
+              title={guests ? t('maisonCard.ui.leaveGuests') : t('maisonCard.ui.protectGuests')}
+              description={t('maisonCard.ui.guestsDescription')}
+              kicker={t('maisonCard.privacyKicker')}
               side="top"
             >
               <button
@@ -493,16 +496,16 @@ export function MaisonCard({
                 data-testid="maison-guests"
               >
                 <UsersRound className="h-4 w-4" aria-hidden="true" />
-                {guests ? 'Invités actifs' : 'Invités'}
+                {guests ? t('maisonCard.guestsActive') : t('maisonCard.guests')}
               </button>
             </GuidedTooltip>
           </div>
 
           <div className="[&>span]:flex [&>span]:w-full">
             <GuidedTooltip
-              title={silent ? 'Réactiver les propositions sonores' : 'Demander le silence'}
-              description="Le silence suspend toute initiative vocale. Les informations peuvent rester visibles sans interrompre la maison."
-              kicker="Quiet mode"
+              title={silent ? t('maisonCard.unmuteTitle') : t('maisonCard.muteTitle')}
+              description={t('maisonCard.muteDescription')}
+              kicker={t('maisonCard.quietModeKicker')}
               side="top"
             >
               <button
@@ -518,7 +521,7 @@ export function MaisonCard({
                 data-testid="maison-silence"
               >
                 {silent ? <Volume2 className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-                {silent ? 'Réactiver' : 'Silence'}
+                {silent ? t('maisonCard.unmute') : t('maisonCard.silence')}
               </button>
             </GuidedTooltip>
           </div>

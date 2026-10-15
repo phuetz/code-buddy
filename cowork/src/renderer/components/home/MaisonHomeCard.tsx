@@ -8,10 +8,12 @@ import type {
 } from '../../../shared/maison-ipc.js';
 import { GuidedTooltip } from '../Tooltip.js';
 import { MaisonCard } from './MaisonCard.js';
+import { useCoworkTranslation } from '../../i18n/translator.js';
 
 const REFRESH_MS = 15_000;
 
 export function MaisonHomeCard() {
+  const t = useCoworkTranslation();
   const [payload, setPayload] = useState<MaisonSnapshotPayload | null>(null);
   const [status, setStatus] = useState<MaisonDataStatus>('loading');
   const mounted = useRef(true);
@@ -100,7 +102,7 @@ export function MaisonHomeCard() {
             >
               <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
                 <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
-                Minuteurs persistants
+                {t('maisonCard.persistentTimers')}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {payload.activeTimers.map((timer) => (
@@ -115,13 +117,13 @@ export function MaisonHomeCard() {
                     <TimerReset className="h-3 w-3" aria-hidden="true" />
                     <span>{timer.label}</span>
                     <span className="font-mono">
-                      {timer.state === 'due' ? 'terminé' : `${Math.ceil(timer.remainingMs / 60_000)} min`}
+                      {timer.state === 'due' ? t('maisonCard.timerDue') : t('maisonCard.timerRemaining', { minutes: Math.ceil(timer.remainingMs / 60_000) })}
                     </span>
                     {timer.state === 'due' ? (
                       <GuidedTooltip
-                        title="Acquitter ce minuteur"
-                        description="Confirme que tu as vu ou entendu l’alerte. Le minuteur ne se répétera plus."
-                        kicker="Cuisine"
+                        title={t('maisonCard.ackTimerTitle')}
+                        description={t('maisonCard.ackTimerDescription')}
+                        kicker={t('maisonCard.kitchenKicker')}
                         side="top"
                       >
                         <button
@@ -129,7 +131,7 @@ export function MaisonHomeCard() {
                           disabled={status !== 'ready'}
                           className="rounded-full p-0.5 hover:bg-warning/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning disabled:cursor-not-allowed disabled:opacity-40"
                           onClick={() => void mutate((maison) => maison.timerAcknowledge(timer.id))}
-                          aria-label={`Acquitter le minuteur ${timer.label}`}
+                          aria-label={t('maisonCard.ackTimerAria', { label: timer.label })}
                         >
                           <ShieldCheck className="h-3 w-3" aria-hidden="true" />
                         </button>
@@ -140,7 +142,7 @@ export function MaisonHomeCard() {
                       disabled={status !== 'ready'}
                       className="rounded-full p-0.5 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-40"
                       onClick={() => void mutate((maison) => maison.timerCancel(timer.id))}
-                      aria-label={`Annuler le minuteur ${timer.label}`}
+                      aria-label={t('maisonCard.cancelTimerAria', { label: timer.label })}
                     >
                       <X className="h-3 w-3" aria-hidden="true" />
                     </button>
@@ -153,18 +155,18 @@ export function MaisonHomeCard() {
           {payload.foodProfile.configured ? (
             <div className="[&>span]:flex [&>span]:h-full [&>span]:w-full">
               <GuidedTooltip
-                title="Profil repas privé"
-                description="Seul un résumé est affiché ici. Les contraintes détaillées restent chiffrées localement et ne sont jamais ajoutées au profil général."
-                kicker="Confidentialité"
+                title={t('maisonCard.privateMealProfileTitle')}
+                description={t('maisonCard.privateMealProfileDescription')}
+                kicker={t('maisonCard.privacyKicker')}
                 side="top"
               >
                 <div className="h-full w-full rounded-2xl border border-success/15 bg-success/5 px-3 py-2 text-[10px] text-text-secondary shadow-soft">
-                  <div className="font-semibold text-success">Profil repas chiffré</div>
+                  <div className="font-semibold text-success">{t('maisonCard.encryptedMealProfile')}</div>
                   <div className="mt-0.5">
-                    {payload.foodProfile.constraintCount} contrainte(s) explicite(s)
+                    {t('maisonCard.explicitConstraints', { count: payload.foodProfile.constraintCount })}
                     {payload.foodProfile.unknownCount > 0
-                      ? ` · ${payload.foodProfile.unknownCount} à confirmer`
-                      : ' · toutes confirmées'}
+                      ? ` · ${t('maisonCard.toConfirm', { count: payload.foodProfile.unknownCount })}`
+                      : ` · ${t('maisonCard.allConfirmed')}`}
                   </div>
                 </div>
               </GuidedTooltip>
