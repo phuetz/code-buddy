@@ -64,3 +64,44 @@ describe('resolveGroundingCoordinatesToAbsolute', () => {
     expect(resolveGroundingCoordinatesToAbsolute({ x: -Infinity, y: -Infinity }, screen)).toBeNull();
   });
 });
+
+describe("ancrage visuel en coordonnées et assertions d'existence", () => {
+  async function resolveWith(intent: string): Promise<{ element?: { ref: number }; error?: string }> {
+    const { ComputerControlTool, setVisionGroundingProvider } = await import(
+      '../../src/tools/computer-control-tool.js'
+    );
+    const snap = { elements: [], elementMap: new Map(), screenSize: { width: 1280, height: 800 } };
+    mockSnapshotManager.getCurrentSnapshot.mockReturnValue(snap);
+    mockSnapshotManager.takeSnapshot.mockResolvedValue(snap);
+    mockSnapshotManager.findElements.mockReturnValue([]);
+    mockSnapshotManager.toAnnotatedScreenshot.mockResolvedValue({ image: 'aW1n' });
+    // Un modèle d'ancrage montre toujours un point, même pour un texte absent.
+    setVisionGroundingProvider(async () => ({ x: 172, y: 145 }));
+    const previous = process.env.CODEBUDDY_VISION_GROUNDING;
+    process.env.CODEBUDDY_VISION_GROUNDING = '1';
+    try {
+      const tool = new ComputerControlTool() as unknown as {
+        resolveElementForIntent(i: Record<string, unknown>, o: Record<string, unknown>): Promise<{ element?: { ref: number }; error?: string }>;
+      };
+      return await tool.resolveElementForIntent(
+        { action: intent },
+        { query: 'Compteur : 7', intent, requireInteractive: false, forceRefresh: true },
+      );
+    } finally {
+      setVisionGroundingProvider(null);
+      if (previous === undefined) delete process.env.CODEBUDDY_VISION_GROUNDING;
+      else process.env.CODEBUDDY_VISION_GROUNDING = previous;
+    }
+  }
+
+  it("n'accepte pas un point comme preuve qu'un texte est visible", async () => {
+    const res = await resolveWith('assert_text_visible');
+    expect(res.element).toBeUndefined();
+    expect(res.error).toMatch(/No element/);
+  });
+
+  it('garde le point pour une intention de clic', async () => {
+    const res = await resolveWith('click_element_by_name');
+    expect(res.element?.ref).toBe(-999);
+  });
+});

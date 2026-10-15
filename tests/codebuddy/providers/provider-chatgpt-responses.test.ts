@@ -47,6 +47,32 @@ describe('convertMessages — chat/completions → Codex Responses input shape',
     });
   });
 
+  it("transmet une image utilisateur en input_image au lieu de la sérialiser en texte", () => {
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgo=';
+    const out = convertMessages([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Où est le bouton Valider ?' },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ] as CodeBuddyMessage[]);
+    expect(out.input[0]).toMatchObject({
+      type: 'message',
+      role: 'user',
+      content: [
+        { type: 'input_text', text: 'Où est le bouton Valider ?' },
+        { type: 'input_image', image_url: dataUrl },
+      ],
+    });
+    // Témoin de l'ancien défaut : aucune partie texte ne doit contenir le base64.
+    const texts = (out.input[0] as { content: Array<{ text?: string }> }).content
+      .map((p) => p.text ?? '')
+      .join('');
+    expect(texts).not.toContain('base64');
+  });
+
   it('joins multiple system messages with double newline', () => {
     const out = convertMessages([
       { role: 'system', content: 'rule 1' },

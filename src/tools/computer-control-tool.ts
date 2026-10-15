@@ -61,6 +61,14 @@ export type VisionGroundingProvider = (req: VisionGroundingRequest) => Promise<n
 
 let visionGroundingProvider: VisionGroundingProvider | null = null;
 
+/**
+ * Intentions qui affirment l'EXISTENCE d'un texte ou d'un élément. Pour elles,
+ * un point rendu par l'ancrage visuel en coordonnées n'est pas une preuve.
+ */
+export function isExistenceAssertionIntent(intent: string | undefined): boolean {
+  return intent === 'assert_text_visible' || intent === 'assert_element_visible';
+}
+
 export function setVisionGroundingProvider(p: VisionGroundingProvider | null): void {
   visionGroundingProvider = p;
 }
@@ -349,6 +357,14 @@ export class ComputerControlTool {
   private permissions = getPermissionManager();
   private systemControl = getSystemControl();
   private snapshotManager = getSmartSnapshotManager();
+  /**
+   * Cible virtuelle rendue par l'ancrage visuel en coordonnées (ref -999).
+   * Elle était seulement glissée dans l'elementMap du snapshot courant ; or
+   * l'appel au modèle de vision dure plus que le TTL du snapshot (5 s), et
+   * `click({ ref: -999 })` échouait ensuite sur « Position required » (mesuré
+   * le 28/09/2026 sous Xvfb). Conservée ici pour UN seul clic.
+   */
+  private groundedVirtualElement: UIElement | null = null;
   private screenRecorder = getScreenRecorder();
   private omniParser = new OmniParserRunner();
   private lastTargetFocusProof: TargetFocusProof | null = null;
@@ -3268,7 +3284,11 @@ if ($clickButtonName) {
 
     // If ref is provided, use element center
     if (input.ref !== undefined) {
-      const element = this.snapshotManager.getElement(input.ref);
+      let element = this.snapshotManager.getElement(input.ref);
+      if (!element && input.ref === -999 && this.groundedVirtualElement) {
+        element = this.groundedVirtualElement;
+      }
+      if (input.ref === -999) this.groundedVirtualElement = null;
       if (element) {
         // Check if this is a browser-sourced element with zero coordinates
         if (element.attributes?.source === 'browser-accessibility' &&
@@ -5063,7 +5083,19 @@ $value.SetValue($targetText)
             });
 
             if (matchedRef !== null && matchedRef !== undefined) {
-              if (typeof matchedRef === 'object' && 'x' in matchedRef && 'y' in matchedRef) {
+              if (
+                typeof matchedRef === 'object' && 'x' in matchedRef && 'y' in matchedRef
+                && isExistenceAssertionIntent(options.intent)
+              ) {
+                // Un ancrage en coordonnées montre toujours un point : il ne peut pas
+                // prouver qu'un texte existe. Mesuré le 28/09/2026 sous Xvfb :
+                // assert_text_visible("Compteur : 7") réussissait sur un écran qui
+                // affichait « Compteur : 0 ». La vérification revient à l'OCR.
+                logger.info('Visual coordinate grounding ignored for an existence assertion', {
+                  intent: options.intent,
+                  query,
+                });
+              } else if (typeof matchedRef === 'object' && 'x' in matchedRef && 'y' in matchedRef) {
                 // The provider returned raw coordinates (e.g. from coordinates-based grounding).
                 // Convert the normalised 0-1000 space to absolute pixels, rejecting
                 // non-finite or out-of-range values so we never click off-screen.
@@ -5085,6 +5117,7 @@ $value.SetValue($targetText)
                   if (currentSnap) {
                     currentSnap.elementMap.set(-999, virtualEl);
                   }
+                  this.groundedVirtualElement = virtualEl;
 
                   logger.info('Visual grounding fallback successfully matched direct coordinates', { x: absolute.x, y: absolute.y });
                   return {

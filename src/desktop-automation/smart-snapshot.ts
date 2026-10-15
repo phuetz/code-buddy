@@ -177,6 +177,77 @@ const DEFAULT_CONFIG: SmartSnapshotConfig = {
   },
 };
 
+/**
+ * Profondeur par défaut du parcours AT-SPI sous Linux.
+ *
+ * L'ancienne limite (5, comptée depuis le nœud application) coupait les arbres
+ * profonds : mesuré le 28/09/2026 sous Xvfb, une fenêtre Avalonia 12 place son
+ * bouton « Valider » à la profondeur 6 (application → frame → Panel →
+ * VisualLayerManager → ContentPresenter → StackPanel → bouton). Le snapshot
+ * rendait les conteneurs et aucun contrôle, donc `click_button` échouait alors
+ * que l'arbre d'accessibilité était complet.
+ */
+export const LINUX_ATSPI_DEFAULT_MAX_DEPTH = 16;
+
+/**
+ * Script Python (PyGObject/Atspi) qui énumère l'arbre d'accessibilité.
+ * Le parcours s'arrête dès `maxElements` nœuds collectés : l'ancienne tranche
+ * `[:100]` appliquée après coup laissait parcourir tout le bureau.
+ */
+export function buildLinuxAtspiScript(maxDepth: number, maxElements: number): string {
+  const depth = Number.isFinite(maxDepth) && maxDepth > 0 ? Math.floor(maxDepth) : LINUX_ATSPI_DEFAULT_MAX_DEPTH;
+  const limit = Number.isFinite(maxElements) && maxElements > 0 ? Math.floor(maxElements) : 500;
+  return `
+import gi
+gi.require_version("Atspi", "2.0")
+from gi.repository import Atspi
+import json
+
+MAX_DEPTH = ${depth}
+MAX_ELEMENTS = ${limit}
+all_elements = []
+
+def get_elements(obj, depth=0):
+    if depth > MAX_DEPTH or len(all_elements) >= MAX_ELEMENTS:
+        return
+
+    try:
+        role = Atspi.Accessible.get_role_name(obj)
+        name = Atspi.Accessible.get_name(obj) or ""
+
+        try:
+            component = obj.get_component()
+            if component:
+                rect = component.get_extents(Atspi.CoordType.SCREEN)
+                bounds = {"x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height}
+            else:
+                bounds = {"x": 0, "y": 0, "width": 0, "height": 0}
+        except:
+            bounds = {"x": 0, "y": 0, "width": 0, "height": 0}
+
+        all_elements.append({
+            "role": role,
+            "name": name,
+            "bounds": bounds
+        })
+
+        for i in range(obj.get_child_count()):
+            if len(all_elements) >= MAX_ELEMENTS:
+                break
+            get_elements(obj.get_child_at_index(i), depth + 1)
+    except:
+        pass
+
+desktop = Atspi.get_desktop(0)
+for i in range(desktop.get_child_count()):
+    if len(all_elements) >= MAX_ELEMENTS:
+        break
+    get_elements(desktop.get_child_at_index(i))
+
+print(json.dumps(all_elements))
+`;
+}
+
 // ============================================================================
 // Smart Snapshot Manager
 // ============================================================================
@@ -992,53 +1063,8 @@ if ($focused) {
     try {
       // Use AT-SPI via python-atspi or accerciser
       // This requires libatspi and python3-atspi2 to be installed
-      const script = `
-import gi
-gi.require_version("Atspi", "2.0")
-from gi.repository import Atspi
-import json
-
-def get_elements(obj, depth=0, max_depth=5):
-    elements = []
-    if depth > max_depth:
-        return elements
-
-    try:
-        role = Atspi.Accessible.get_role_name(obj)
-        name = Atspi.Accessible.get_name(obj) or ""
-
-        try:
-            component = obj.get_component()
-            if component:
-                rect = component.get_extents(Atspi.CoordType.SCREEN)
-                bounds = {"x": rect.x, "y": rect.y, "width": rect.width, "height": rect.height}
-            else:
-                bounds = {"x": 0, "y": 0, "width": 0, "height": 0}
-        except:
-            bounds = {"x": 0, "y": 0, "width": 0, "height": 0}
-
-        elements.append({
-            "role": role,
-            "name": name,
-            "bounds": bounds
-        })
-
-        for i in range(obj.get_child_count()):
-            child = obj.get_child_at_index(i)
-            elements.extend(get_elements(child, depth + 1, max_depth))
-    except:
-        pass
-
-    return elements
-
-desktop = Atspi.get_desktop(0)
-all_elements = []
-for i in range(desktop.get_child_count()):
-    app = desktop.get_child_at_index(i)
-    all_elements.extend(get_elements(app))
-
-print(json.dumps(all_elements[:100]))
-      `;
+      const maxDepth = _options.maxDepth ?? LINUX_ATSPI_DEFAULT_MAX_DEPTH;
+      const script = buildLinuxAtspiScript(maxDepth, this.config.maxElements);
 
       // Try to run the Python script. Pass it base64-encoded and decode inside the
       // interpreter — embedding a multi-line script (which itself contains quotes)

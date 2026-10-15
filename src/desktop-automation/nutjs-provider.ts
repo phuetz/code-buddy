@@ -5,6 +5,7 @@
  * Provides mouse, keyboard, window, and clipboard control.
  */
 
+import { execFileSync } from 'child_process';
 import type {
   ModifierKey,
   MouseButton,
@@ -29,6 +30,42 @@ import type {
   ProviderCapabilities,
 } from './types.js';
 import type { IAutomationProvider } from './automation-manager.js';
+import { logger } from '../utils/logger.js';
+
+/**
+ * Vrai quand `xprop -root _NET_ACTIVE_WINDOW` montre une fenêtre active réelle.
+ *
+ * Sans gestionnaire de fenêtres EWMH (Xvfb nu, certains bureaux distants),
+ * libnut interroge la fenêtre 0x1 ; XGetGeometry lève BadDrawable et le
+ * gestionnaire d'erreurs Xlib par défaut appelle exit(1) : tout le processus
+ * Code Buddy meurt au milieu d'une tâche (mesuré le 28/09/2026 sous Xvfb,
+ * action get_active_window). Aucun try/catch JavaScript ne peut l'attraper.
+ */
+export function xpropShowsActiveWindow(xpropOutput: string): boolean {
+  const match = /_NET_ACTIVE_WINDOW\(WINDOW\):\s*window id #\s*(0x[0-9a-f]+)/i.exec(xpropOutput);
+  return match !== null && match[1] !== undefined && parseInt(match[1], 16) !== 0;
+}
+
+function linuxActiveWindowQueryIsSafe(): boolean {
+  const probe = (cmd: string, args: string[]): string | 'missing' | 'failed' => {
+    try {
+      return execFileSync(cmd, args, {
+        encoding: 'utf-8',
+        timeout: 3000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    } catch (err) {
+      return (err as { code?: string }).code === 'ENOENT' ? 'missing' : 'failed';
+    }
+  };
+  const xprop = probe('xprop', ['-root', '_NET_ACTIVE_WINDOW']);
+  if (xprop !== 'missing') return xprop !== 'failed' && xpropShowsActiveWindow(xprop);
+  // Sans xprop : xdotool refuse lui aussi proprement quand l'atome manque.
+  const xdotool = probe('xdotool', ['getactivewindow']);
+  if (xdotool !== 'missing') return xdotool !== 'failed';
+  // Aucun des deux outils : comportement historique (on ne sait pas trancher).
+  return true;
+}
 
 // Dynamic imports to avoid loading native modules at startup
 let nutjsModule: typeof import('@nut-tree-fork/nut-js') | null = null;
@@ -378,6 +415,13 @@ export class NutJsProvider implements IAutomationProvider {
 
   async getActiveWindow(): Promise<WindowInfo | null> {
     const nutjs = this.ensureInitialized();
+    if (process.platform === 'linux' && !shouldUseHeadlessNutJsMock() && !linuxActiveWindowQueryIsSafe()) {
+      logger.warn(
+        'get_active_window: X server without _NET_ACTIVE_WINDOW (no EWMH window manager); ' +
+          'skipping the libnut query, which would abort the whole process on an X error.',
+      );
+      return null;
+    }
     try {
       const win = await nutjs.getActiveWindow();
       const region = await win.region;

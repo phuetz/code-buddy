@@ -151,8 +151,12 @@ function resolveCodexModel(
 interface ResponsesInputMessage {
   type: 'message';
   role: 'user' | 'assistant' | 'system' | 'developer';
-  content: Array<{ type: 'input_text' | 'output_text'; text: string }>;
+  content: ResponsesContentPart[];
 }
+
+type ResponsesContentPart =
+  | { type: 'input_text' | 'output_text'; text: string }
+  | { type: 'input_image'; image_url: string };
 
 interface ResponsesAdditionalTools {
   type: 'additional_tools';
@@ -729,6 +733,40 @@ export function isFreshUserTurn(messages: CodeBuddyMessage[]): boolean {
  * (Codex expects reasoning items to appear before the function_calls
  * they belong to).
  */
+/**
+ * Contenu d'un message utilisateur au format Responses.
+ *
+ * Un contenu multimodal (parties `text` + `image_url` au format Chat Completions)
+ * était sérialisé en JSON dans une seule partie `input_text` : le modèle recevait
+ * l'image comme une longue chaîne base64 et ne la voyait jamais. Mesuré le
+ * 28/09/2026 : l'ancrage visuel de `computer_control` rendait (849, 850) sur 1000
+ * pour un bouton situé en (172, 198) — une réponse à l'aveugle.
+ */
+export function convertUserContent(content: unknown): ResponsesContentPart[] {
+  if (typeof content === 'string') return [{ type: 'input_text', text: content }];
+  if (!Array.isArray(content)) {
+    return [{ type: 'input_text', text: JSON.stringify(content ?? '') }];
+  }
+  const parts: ResponsesContentPart[] = [];
+  for (const part of content as Array<Record<string, unknown>>) {
+    if (part?.type === 'text' && typeof part.text === 'string') {
+      parts.push({ type: 'input_text', text: part.text });
+      continue;
+    }
+    if (part?.type === 'image_url') {
+      const raw = part.image_url as unknown;
+      const url = typeof raw === 'string' ? raw : (raw as { url?: unknown } | undefined)?.url;
+      if (typeof url === 'string' && url.length > 0) {
+        parts.push({ type: 'input_image', image_url: url });
+        continue;
+      }
+    }
+    // Partie inconnue : conservée en texte plutôt que perdue silencieusement.
+    parts.push({ type: 'input_text', text: JSON.stringify(part) });
+  }
+  return parts.length > 0 ? parts : [{ type: 'input_text', text: '' }];
+}
+
 export function convertMessages(
   messages: CodeBuddyMessage[],
   priorReasoningItems: ResponsesReasoningItem[] = [],
@@ -831,14 +869,10 @@ export function convertMessages(
     }
 
     // Default: user message.
-    const text =
-      typeof msg.content === 'string'
-        ? msg.content
-        : JSON.stringify(msg.content ?? '');
     input.push({
       type: 'message',
       role: 'user',
-      content: [{ type: 'input_text', text }],
+      content: convertUserContent(msg.content),
     });
   }
 
