@@ -1,0 +1,7 @@
+Date: 2026-09-29T16:33:57Z
+Révision testée: 38708b7e4edc651287c6f30623eae01c2ebb67e6
+Exécution: source du checkout via tsx, HOME=<QA_HOME>, projet=<QA_PROJECT>.
+Commande: buddy deploy init fly --port 18751 --output <QA_PROJECT>/deploy
+Observé: fly.toml généré et présent sous le projet jetable.
+Portée: Préparation locale prouvée ; aucun déploiement cloud ni upload.
+Verdict: prouvée

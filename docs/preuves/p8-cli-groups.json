@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-groups",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "560268465e9bdb308a2b3a11395345228bd966ee84afc6b22719b4f2cd6947ef",
+  "artifact": "docs/preuves/p8-cli-groups.log",
+  "summary": "Blocklist: 1 users à la commande suivante, puis Unblocked user."
+}

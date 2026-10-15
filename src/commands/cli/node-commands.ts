@@ -14,8 +14,11 @@
  */
 
 import { Command } from 'commander';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 export function registerNodeCommands(program: Command): void {
+  const nodeStore = join(homedir(), '.codebuddy', 'nodes.json');
   const nodes = program
     .command('nodes')
     .description('Manage companion app nodes (macOS, iOS, Android)');
@@ -27,7 +30,7 @@ export function registerNodeCommands(program: Command): void {
     .option('--status <status>', 'Filter by status (online, offline, pairing)')
     .action(async (opts) => {
       const { NodeManager } = await import('../../nodes/index.js');
-      const mgr = NodeManager.getInstance();
+      const mgr = NodeManager.getInstance({ persistPath: nodeStore });
       const nodeList = mgr.listNodes({
         platform: opts.platform,
         status: opts.status,
@@ -56,7 +59,7 @@ export function registerNodeCommands(program: Command): void {
     .argument('<name>', 'Node display name')
     .action(async (platform, name) => {
       const { NodeManager } = await import('../../nodes/index.js');
-      const mgr = NodeManager.getInstance();
+      const mgr = NodeManager.getInstance({ persistPath: nodeStore });
 
       try {
         const req = mgr.requestPairing(platform, name);
@@ -77,7 +80,7 @@ export function registerNodeCommands(program: Command): void {
     .argument('<code>', 'Pairing code')
     .action(async (code) => {
       const { NodeManager } = await import('../../nodes/index.js');
-      const mgr = NodeManager.getInstance();
+      const mgr = NodeManager.getInstance({ persistPath: nodeStore });
 
       try {
         const node = mgr.approvePairing(code);
@@ -98,7 +101,7 @@ export function registerNodeCommands(program: Command): void {
     .argument('<nodeId>', 'Node ID')
     .action(async (nodeId) => {
       const { NodeManager } = await import('../../nodes/index.js');
-      const mgr = NodeManager.getInstance();
+      const mgr = NodeManager.getInstance({ persistPath: nodeStore });
       const info = mgr.describeNode(nodeId);
 
       if (!info) {
@@ -126,7 +129,7 @@ export function registerNodeCommands(program: Command): void {
     .argument('<nodeId>', 'Node ID')
     .action(async (nodeId) => {
       const { NodeManager } = await import('../../nodes/index.js');
-      const mgr = NodeManager.getInstance();
+      const mgr = NodeManager.getInstance({ persistPath: nodeStore });
       const removed = mgr.removeNode(nodeId);
       if (removed) {
         console.log(`Node ${nodeId} removed.`);
@@ -145,7 +148,7 @@ export function registerNodeCommands(program: Command): void {
     .option('--timeout <ms>', 'Timeout in milliseconds', '30000')
     .action(async (nodeId, capability, opts) => {
       const { NodeManager } = await import('../../nodes/index.js');
-      const mgr = NodeManager.getInstance();
+      const mgr = NodeManager.getInstance({ persistPath: nodeStore });
 
       let params: Record<string, unknown> | undefined;
       if (opts.params) {
@@ -179,7 +182,7 @@ export function registerNodeCommands(program: Command): void {
     .description('List pending pairing requests')
     .action(async () => {
       const { NodeManager } = await import('../../nodes/index.js');
-      const mgr = NodeManager.getInstance();
+      const mgr = NodeManager.getInstance({ persistPath: nodeStore });
       const pending = mgr.getPendingPairings();
 
       if (pending.length === 0) {

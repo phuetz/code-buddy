@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "featureId": "cli-update",
+  "kind": "integration",
+  "result": "passed",
+  "date": "2026-09-29T16:33:57Z",
+  "revision": "38708b7e4edc651287c6f30623eae01c2ebb67e6",
+  "sourceDigest": "57c952dca1cbce3a3ebd8eecc182c8d5cbe1aa280e820aed0319a8d9c8857e8f",
+  "artifact": "docs/preuves/p8-cli-update.log",
+  "summary": "Canal stable et version courante affichés ; rien installé."
+}
